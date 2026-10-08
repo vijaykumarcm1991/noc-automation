@@ -1,0 +1,34 @@
+<%- include('../partials/header', { title: 'Run #' + run.id }) %>
+
+<a href="/runs" class="text-blue-600 hover:underline text-sm">&larr; Back to history</a>
+
+<h1 class="text-2xl font-bold mt-2 mb-4">Run #<%= run.id %> — <%= run.job_name %></h1>
+
+<div class="bg-white rounded-lg shadow p-4 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+  <div>
+    <div class="text-gray-500">Status</div>
+    <% const cls = run.status === 'success' ? 'text-green-600' : (run.status === 'running' ? 'text-blue-600' : 'text-red-600'); %>
+    <div class="font-semibold <%= cls %>"><%= run.status %></div>
+  </div>
+  <div>
+    <div class="text-gray-500">Started</div>
+    <div><%= run.started_at %></div>
+  </div>
+  <div>
+    <div class="text-gray-500">Finished</div>
+    <div><%= run.finished_at || '—' %></div>
+  </div>
+  <div>
+    <div class="text-gray-500">Exit code</div>
+    <div class="font-mono"><%= run.exit_code ?? '—' %></div>
+  </div>
+</div>
+
+<h2 class="text-lg font-semibold mb-2">Output</h2>
+<% if (run.output) { %>
+  <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto whitespace-pre-wrap"><%= run.output %></pre>
+<% } else { %>
+  <p class="text-gray-500">No output captured.</p>
+<% } %>
+
+<%- include('../partials/footer') %>

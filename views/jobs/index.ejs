@@ -1,0 +1,51 @@
+<%- include('../partials/header', { title: 'Jobs' }) %>
+
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-bold">Jobs</h1>
+  <a href="/jobs/new" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">+ New Job</a>
+</div>
+
+<% if (jobs.length === 0) { %>
+  <p class="text-gray-500">No jobs yet. <a href="/jobs/new" class="text-blue-600 underline">Create one</a>.</p>
+<% } else { %>
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-left text-gray-500">
+        <tr>
+          <th class="px-4 py-2">Name</th>
+          <th class="px-4 py-2">Command</th>
+          <th class="px-4 py-2">Schedule</th>
+          <th class="px-4 py-2">Status</th>
+          <th class="px-4 py-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% jobs.forEach(job => { %>
+          <tr class="border-t">
+            <td class="px-4 py-2 font-medium"><%= job.name %></td>
+            <td class="px-4 py-2 font-mono text-xs"><%= job.command %></td>
+            <td class="px-4 py-2 font-mono text-xs"><%= job.cron_schedule || '—' %></td>
+            <td class="px-4 py-2">
+              <% if (job.enabled) { %>
+                <span class="text-green-600 font-medium">Enabled</span>
+              <% } else { %>
+                <span class="text-gray-400">Disabled</span>
+              <% } %>
+            </td>
+            <td class="px-4 py-2 flex gap-2">
+              <form method="post" action="/jobs/<%= job.id %>/run">
+                <button class="text-blue-600 hover:underline">Run now</button>
+              </form>
+              <a href="/jobs/<%= job.id %>/edit" class="text-blue-600 hover:underline">Edit</a>
+              <form method="post" action="/jobs/<%= job.id %>/delete" onsubmit="return confirm('Delete this job?');">
+                <button class="text-red-600 hover:underline">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+<% } %>
+
+<%- include('../partials/footer') %>

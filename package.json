@@ -1,0 +1,21 @@
+{
+  "name": "noc-automation",
+  "version": "1.0.0",
+  "description": "Automation tool with a scheduled job runner and an encrypted secrets vault for Node.js",
+  "type": "commonjs",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
+  },
+  "license": "MIT"
+}

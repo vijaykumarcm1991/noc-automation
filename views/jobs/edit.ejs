@@ -1,0 +1,57 @@
+<%- include('../partials/header', { title: 'Edit Job' }) %>
+
+<h1 class="text-2xl font-bold mb-6">Edit Job</h1>
+
+<form method="post" action="/jobs/<%= job.id %>" class="bg-white p-6 rounded-lg shadow space-y-4 max-w-2xl">
+  <div>
+    <label class="block font-medium mb-1" for="name">Name</label>
+    <input id="name" name="name" required value="<%= job.name %>" class="w-full border rounded px-3 py-2">
+  </div>
+
+  <div>
+    <label class="block font-medium mb-1" for="command">Command</label>
+    <input id="command" name="command" required value="<%= job.command %>" class="w-full border rounded px-3 py-2 font-mono">
+  </div>
+
+  <div>
+    <label class="block font-medium mb-1" for="working_dir">Working directory</label>
+    <input id="working_dir" name="working_dir" value="<%= job.working_dir || '' %>" class="w-full border rounded px-3 py-2">
+  </div>
+
+  <div>
+    <label class="block font-medium mb-1" for="cron_schedule">Cron schedule</label>
+    <input id="cron_schedule" name="cron_schedule" value="<%= job.cron_schedule || '' %>" class="w-full border rounded px-3 py-2 font-mono">
+  </div>
+
+  <div class="flex items-center gap-4">
+    <div class="flex-1">
+      <label class="block font-medium mb-1" for="timeout_sec">Timeout (seconds)</label>
+      <input id="timeout_sec" name="timeout_sec" type="number" value="<%= job.timeout_sec %>" class="w-full border rounded px-3 py-2">
+    </div>
+    <div class="flex items-center gap-2 pt-6">
+      <input id="enabled" name="enabled" type="checkbox" value="1" <%= job.enabled ? 'checked' : '' %> class="h-4 w-4">
+      <label for="enabled" class="font-medium">Enable scheduling</label>
+    </div>
+  </div>
+
+  <div>
+    <label class="block font-medium mb-1">Secrets available to this job</label>
+    <% if (secrets.length === 0) { %>
+      <p class="text-xs text-gray-500">No secrets yet.</p>
+    <% } else { %>
+      <div class="grid grid-cols-2 gap-2">
+        <% secrets.forEach(s => { %>
+          <label class="flex items-center gap-2 border rounded px-3 py-2">
+            <input type="checkbox" name="secret_ids" value="<%= s.id %>" <%= linkedIds.has(s.id) ? 'checked' : '' %> class="h-4 w-4">
+            <span><%= s.name %></span>
+          </label>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+
+  <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Save Changes</button>
+  <a href="/jobs" class="text-gray-500 ml-2">Cancel</a>
+</form>
+
+<%- include('../partials/footer') %>

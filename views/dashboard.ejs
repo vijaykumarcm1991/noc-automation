@@ -1,0 +1,30 @@
+<%- include('partials/header', { title: 'Dashboard' }) %>
+
+<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+  <a href="/jobs" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
+    <div class="text-4xl font-bold text-slate-800"><%= jobCount %></div>
+    <div class="text-gray-500 mt-1">Jobs</div>
+  </a>
+  <a href="/secrets" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
+    <div class="text-4xl font-bold text-slate-800"><%= secretCount %></div>
+    <div class="text-gray-500 mt-1">Secrets</div>
+  </a>
+  <a href="/runs" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
+    <div class="text-4xl font-bold text-slate-800"><%= runCount %></div>
+    <div class="text-gray-500 mt-1">Total Runs</div>
+  </a>
+</div>
+
+<div class="bg-white p-6 rounded-lg shadow">
+  <h2 class="text-lg font-semibold mb-2">Getting started</h2>
+  <ol class="list-decimal list-inside text-gray-700 space-y-1">
+    <li>Create a <a href="/secrets/new" class="text-blue-600 underline">secret</a> in the vault.</li>
+    <li>Create a <a href="/jobs/new" class="text-blue-600 underline">job</a> that runs a command (e.g. <code class="bg-gray-100 px-1 rounded">python3 script.py</code>) and link the secret(s) it needs.</li>
+    <li>Trigger the job with <strong>Run now</strong>, or set a cron schedule and enable it.</li>
+    <li>Watch the output in <a href="/runs" class="text-blue-600 underline">Run history</a>. Linked secrets are injected as environment variables at run time.</li>
+  </ol>
+</div>
+
+<%- include('partials/footer') %>
