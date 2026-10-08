@@ -6,6 +6,7 @@ const express = require('express');
 const { initDb } = require('./src/db');
 const { setMasterKey } = require('./src/vault');
 const { rescheduleAll } = require('./src/scheduler');
+const { initAuth, requireAuth } = require('./src/auth');
 
 const PORT = process.env.APP_PORT || 3000;
 const DB_PATH = process.env.DB_PATH || './data/automation.db';
@@ -26,11 +27,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Basic navigation context for templates.
+// Set up the authenticated session store before any routes.
+initAuth(app);
+
+// Authenticated navigation context for templates.
 app.use((req, res, next) => {
   res.locals.active = '';
+  res.locals.authed = !!(req.session && req.session.authenticated);
   next();
 });
+
+// Public routes: login and logout.
+app.use('/', require('./src/routes/auth'));
+
+// Everything below requires an authenticated admin session.
+app.use(requireAuth);
 
 app.use('/jobs', require('./src/routes/jobs'));
 app.use('/secrets', require('./src/routes/secrets'));

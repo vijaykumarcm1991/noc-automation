@@ -8,11 +8,18 @@
 </head>
 <body class="bg-gray-100 text-gray-900 min-h-screen">
   <nav class="bg-slate-800 text-white">
-    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-6">
-      <a href="/" class="font-bold text-lg">⚙️ Automation Tool</a>
-      <a href="/jobs" class="hover:text-gray-300">Jobs</a>
-      <a href="/secrets" class="hover:text-gray-300">Secrets Vault</a>
-      <a href="/runs" class="hover:text-gray-300">Run History</a>
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-6">
+        <a href="/" class="font-bold text-lg">⚙️ Automation Tool</a>
+        <a href="/jobs" class="hover:text-gray-300">Jobs</a>
+        <a href="/secrets" class="hover:text-gray-300">Secrets Vault</a>
+        <a href="/runs" class="hover:text-gray-300">Run History</a>
+      </div>
+      <% if (typeof authed !== 'undefined' && authed) { %>
+        <form method="post" action="/logout">
+          <button class="text-gray-300 hover:text-white text-sm">Sign out</button>
+        </form>
+      <% } %>
     </div>
   </nav>
   <main class="max-w-5xl mx-auto px-4 py-6">

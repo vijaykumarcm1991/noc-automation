@@ -43,4 +43,26 @@ router.post('/:id/delete', (req, res) => {
   res.redirect('/secrets');
 });
 
+// Edit secret form (change its value; name stays fixed).
+router.get('/:id/edit', (req, res) => {
+  const secret = getDb()
+    .prepare('SELECT id, name, updated_at FROM secrets WHERE id = ?')
+    .get(req.params.id);
+  if (!secret) return res.status(404).send('Secret not found');
+  res.render('secrets/edit', { secret });
+});
+
+// Update a secret's value (re-encrypted before hitting disk).
+router.post('/:id/edit', (req, res) => {
+  const { value } = req.body;
+  if (!value) {
+    return res.status(400).send('Value is required.');
+  }
+  const enc = encrypt(value);
+  getDb()
+    .prepare("UPDATE secrets SET encrypted_value = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(enc, req.params.id);
+  res.redirect('/secrets');
+});
+
 module.exports = router;

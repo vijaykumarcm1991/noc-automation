@@ -11,6 +11,7 @@ const vault = require('../src/vault');
 const runner = require('../src/runner');
 const { initDb, getDb } = require('../src/db');
 const scheduler = require('../src/scheduler');
+const { verifyCredentials, getAdminUser } = require('../src/auth');
 
 // --- Vault tests -----------------------------------------------------------
 
@@ -107,4 +108,62 @@ test('cron: invalid schedule is skipped, not fatal', () => {
     .prepare('INSERT INTO jobs (name, command, cron_schedule, enabled, timeout_sec) VALUES (?, ?, ?, 1, 10)')
     .run('bad-cron', 'echo hi', 'not-a-cron').lastInsertRowid;
   assert.doesNotThrow(() => scheduler.scheduleJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(badId)));
+});
+
+// --- Auth tests ------------------------------------------------------------
+
+function withAdmin(user = 'admin', pass = 'secret-pw') {
+  process.env.ADMIN_USERNAME = user;
+  process.env.ADMIN_PASSWORD = pass;
+  return () => {
+    delete process.env.ADMIN_USERNAME;
+    delete process.env.ADMIN_PASSWORD;
+  };
+}
+
+test('auth: accepts correct credentials, rejects wrong ones (constant-time)', () => {
+  const cleanup = withAdmin('admin', 's3cret-pass');
+  try {
+    assert.ok(verifyCredentials('admin', 's3cret-pass'), 'correct creds should pass');
+    assert.ok(!verifyCredentials('admin', 'wrong-pass'), 'wrong password should fail');
+    assert.ok(!verifyCredentials('nobody', 's3cret-pass'), 'wrong username should fail');
+    assert.ok(!verifyCredentials('admin', ''), 'empty password should fail');
+  } finally {
+    cleanup();
+  }
+});
+
+test('auth: default username is admin when unset', () => {
+  const u = getAdminUser();
+  assert.strictEqual(u.username, 'admin');
+});
+
+test('auth: verifyCredentials fails when no password is configured', () => {
+  const cleanup = withAdmin('admin', '');
+  try {
+    assert.ok(!verifyCredentials('admin', 'anything'));
+  } finally {
+    cleanup();
+  }
+});
+
+// --- Secret edit round-trip ------------------------------------------------
+
+test('secret edit: updating a value re-encrypts and decrypts to the new value', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'noc-edit-'));
+  initDb(path.join(tmpDir, 'test.db'));
+  vault.setMasterKey(crypto.randomBytes(32).toString('hex'));
+
+  const db = getDb();
+  const secretId = db
+    .prepare('INSERT INTO secrets (name, encrypted_value) VALUES (?, ?)')
+    .run('TOKEN', vault.encrypt('old-value')).lastInsertRowid;
+
+  // Simulate the edit route: replace with a freshly encrypted value.
+  db.prepare("UPDATE secrets SET encrypted_value = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(vault.encrypt('new-value'), secretId);
+
+  const stored = db.prepare('SELECT encrypted_value FROM secrets WHERE id = ?').get(secretId);
+  assert.strictEqual(vault.decrypt(stored.encrypted_value), 'new-value');
+  assert.notStrictEqual(stored.encrypted_value, 'old-value');
 });
