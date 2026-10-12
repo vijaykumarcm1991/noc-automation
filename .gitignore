@@ -2,3 +2,7 @@ node_modules/
 .env
 data/
 *.log
+
+# Python build artifacts
+__pycache__/
+*.pyc
