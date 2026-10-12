@@ -1,26 +1,34 @@
-#!/bin/python3
+#!/usr/bin/env python3
 
 import requests
 import base64
 import os
+import sys
 import csv
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
 import zipfile
 
+# All dates (report day, file names, log timestamps) are in IST.
+IST = ZoneInfo(os.getenv("APP_TZ", "Asia/Kolkata"))
+
 # =========================
 # START TIME (NEW)
 # =========================
-start_time = datetime.now()
+start_time = datetime.now(IST)
 
 # =========================
 # LOGGING SETUP
 # =========================
-log_dir = "/var/scripts/logs"
+# Paths default to /var/scripts but can be overridden from the environment.
+SCRIPTS_HOME = os.getenv("JSM_SCRIPTS_HOME", "/var/scripts")
+
+log_dir = os.getenv("JSM_LOG_DIR", os.path.join(SCRIPTS_HOME, "logs"))
 os.makedirs(log_dir, exist_ok=True)
 
 log_file = f"{log_dir}/jsm_daily_report.log"
@@ -30,15 +38,22 @@ logger.setLevel(logging.INFO)
 
 handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=3)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter.converter = lambda *args: datetime.now(IST).timetuple()
 handler.setFormatter(formatter)
+
+# Also log to stdout so the automation tool's run history captures the output.
+console = logging.StreamHandler(sys.stdout)
+console.setFormatter(formatter)
 
 if not logger.handlers:
     logger.addHandler(handler)
+    logger.addHandler(console)
 
 # =========================
 # LOAD ENV
 # =========================
-load_dotenv("/var/scripts/.env")
+# Values already in the environment (e.g. vault secrets) take precedence.
+load_dotenv(os.getenv("JSM_ENV_FILE", os.path.join(SCRIPTS_HOME, ".env")))
 
 # JSM_USER and JSM_TOKEN are injected as environment variables by the
 # automation tool's secrets vault (secret name == env var name).
@@ -64,7 +79,10 @@ headers = {
 # =========================
 # API
 # =========================
-url = f"{BASE_URL}/rest/api/3/search/jql"
+url = f"{BASE_URL.rstrip('/')}/rest/api/3/search/jql"
+
+# (connect, read) timeout in seconds for each Jira request.
+REQUEST_TIMEOUT = (10, int(os.getenv("JSM_REQUEST_TIMEOUT", 60)))
 
 # =========================
 # JQL (DAILY REPORT)
@@ -94,8 +112,8 @@ def format_date(date_str):
         return ""
     try:
         dt = datetime.strptime(date_str, '%Y-%m-%dT%H:%M:%S.%f%z')
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
-    except:
+        return dt.astimezone(IST).strftime('%Y-%m-%d %H:%M:%S')
+    except (ValueError, TypeError):
         logger.warning(f"Date parsing failed: {date_str}")
         return date_str
 
@@ -138,11 +156,15 @@ while True:
     if next_page_token:
         params["nextPageToken"] = next_page_token
 
-    response = requests.get(url, headers=headers, params=params)
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        raise
 
     if response.status_code != 200:
-        logger.error(f"API failed: {response.status_code} - {response.text}")
-        raise Exception("API failure")
+        logger.error(f"API failed: {response.status_code} - {response.text[:500]}")
+        raise RuntimeError(f"Jira API returned HTTP {response.status_code}")
 
     data = response.json()
 
@@ -231,10 +253,10 @@ for issue in all_issues:
 # =========================
 # FILE NAME
 # =========================
-output_dir = "/var/scripts/jsm_daily"
+output_dir = os.getenv("JSM_OUTPUT_DIR", os.path.join(SCRIPTS_HOME, "jsm_daily"))
 os.makedirs(output_dir, exist_ok=True)
 
-yesterday = datetime.now() - timedelta(days=1)
+yesterday = datetime.now(IST) - timedelta(days=1)
 yesterday_date = yesterday.strftime("%d%b%Y")
 
 csv_path = os.path.join(output_dir, f"JSM_Daily_Report_{yesterday_date}.csv")
@@ -242,6 +264,8 @@ csv_path = os.path.join(output_dir, f"JSM_Daily_Report_{yesterday_date}.csv")
 # =========================
 # WRITE CSV + ZIP + EMAIL
 # =========================
+email_failed = False
+
 try:
     # Write CSV
     with open(csv_path, mode="w", newline="", encoding="utf-8") as file:
@@ -274,9 +298,6 @@ try:
     if not all([SMTP_SERVER, SMTP_EMAIL, SMTP_PASSWORD, EMAIL_TO]):
         logger.warning("Email config missing. Skipping email sending.")
     else:
-        import smtplib
-        from email.message import EmailMessage
-
         recipients = [email.strip() for email in EMAIL_TO.split(",")]
 
         msg = EmailMessage()
@@ -310,7 +331,7 @@ NOC - Report Automation
         # SEND EMAIL
         # =========================
         try:
-            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=60) as server:
                 server.starttls()
                 server.login(SMTP_EMAIL, SMTP_PASSWORD)
                 server.send_message(msg)
@@ -324,6 +345,7 @@ NOC - Report Automation
             logger.info(f"ZIP file deleted after email: {zip_path}")
 
         except Exception as e:
+            email_failed = True
             logger.error(f"Email sending failed: {str(e)}")
 
 except Exception as e:
@@ -333,7 +355,12 @@ except Exception as e:
 # =========================
 # EXECUTION TIME (NEW)
 # =========================
-end_time = datetime.now()
+end_time = datetime.now(IST)
 duration = (end_time - start_time).total_seconds()
 
 logger.info(f"Execution time: {duration} seconds")
+
+# A report that never reached its recipients is a failed run.
+if email_failed:
+    logger.error("Report generated but email delivery failed; exiting with error")
+    sys.exit(1)

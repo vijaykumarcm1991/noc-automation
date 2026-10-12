@@ -51,9 +51,39 @@ function initDb(dbPath) {
       exit_code   INTEGER,
       output      TEXT
     );
+
+    CREATE INDEX IF NOT EXISTS idx_runs_job ON runs(job_id, id);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid     TEXT PRIMARY KEY,
+      sess    TEXT NOT NULL,
+      expires INTEGER NOT NULL
+    );
   `);
 
   return db;
+}
+
+// Runs left in 'running' belong to a previous process that died mid-run;
+// nothing will ever finish them, so close them out at startup.
+function markInterruptedRuns() {
+  return getDb()
+    .prepare(
+      `UPDATE runs
+          SET status = 'interrupted', finished_at = datetime('now'),
+              output = COALESCE(output, '') || '\n[runner] interrupted: server stopped before the run finished'
+        WHERE status = 'running'`
+    )
+    .run().changes;
+}
+
+// Delete runs older than the given number of days (0 or less keeps everything).
+function pruneRuns(retentionDays) {
+  const days = Number(retentionDays);
+  if (!(days > 0)) return 0;
+  return getDb()
+    .prepare("DELETE FROM runs WHERE status != 'running' AND started_at < datetime('now', ?)")
+    .run(`-${days} days`).changes;
 }
 
 function getDb() {
@@ -61,4 +91,4 @@ function getDb() {
   return db;
 }
 
-module.exports = { initDb, getDb };
+module.exports = { initDb, getDb, markInterruptedRuns, pruneRuns };

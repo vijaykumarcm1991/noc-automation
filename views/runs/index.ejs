@@ -1,38 +1,65 @@
-<%- include('../partials/header', { title: 'Run History' }) %>
+<%- include('../partials/header', { title: 'Run history', refresh: runs.some(r => r.status === 'running') ? 5 : 0 }) %>
 
-<h1 class="text-2xl font-bold mb-6">Run History</h1>
+<div class="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Run history</h1>
+    <p class="mt-1 text-sm text-slate-500">Latest 200 runs. Times in <%= tz %>.</p>
+  </div>
+  <form method="get" action="/runs" class="flex flex-wrap items-center gap-2">
+    <select name="job" class="input w-auto py-1.5" onchange="this.form.submit()">
+      <option value="">All jobs</option>
+      <% jobs.forEach(j => { %>
+        <option value="<%= j.id %>" <%= jobFilter === j.id ? 'selected' : '' %>><%= j.name %></option>
+      <% }) %>
+    </select>
+    <select name="status" class="input w-auto py-1.5" onchange="this.form.submit()">
+      <option value="">All statuses</option>
+      <% [['problems', 'Problems (not success)'], ['success', 'Success'], ['failed', 'Failed'], ['timed_out', 'Timed out'], ['cancelled', 'Cancelled'], ['interrupted', 'Interrupted'], ['running', 'Running']].forEach(([v, l]) => { %>
+        <option value="<%= v %>" <%= statusFilter === v ? 'selected' : '' %>><%= l %></option>
+      <% }) %>
+    </select>
+    <noscript><button class="btn-secondary py-1.5">Filter</button></noscript>
+    <% if (jobFilter || statusFilter) { %><a href="/runs" class="btn px-2 py-1.5 text-slate-500 hover:text-slate-900"><%- icon('x') %> Clear</a><% } %>
+  </form>
+</div>
 
 <% if (runs.length === 0) { %>
-  <p class="text-gray-500">No runs yet. Trigger a job to see its output here.</p>
+  <div class="card px-6 py-16 text-center">
+    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400"><%- icon('history', 'h-6 w-6') %></div>
+    <h2 class="mt-4 text-base font-semibold">No runs found</h2>
+    <p class="mt-1 text-sm text-slate-500"><%= jobFilter || statusFilter ? 'Try clearing the filters.' : 'Trigger a job to see its output here.' %></p>
+  </div>
 <% } else { %>
-  <div class="bg-white rounded-lg shadow overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-left text-gray-500">
-        <tr>
-          <th class="px-4 py-2">#</th>
-          <th class="px-4 py-2">Job</th>
-          <th class="px-4 py-2">Status</th>
-          <th class="px-4 py-2">Started</th>
-          <th class="px-4 py-2">Exit</th>
-          <th class="px-4 py-2"></th>
-        </tr>
-      </thead>
-      <tbody>
-        <% runs.forEach(r => { %>
-          <tr class="border-t">
-            <td class="px-4 py-2 text-gray-500"><%= r.id %></td>
-            <td class="px-4 py-2 font-medium"><%= r.job_name %></td>
-            <td class="px-4 py-2">
-              <% const cls = r.status === 'success' ? 'text-green-600' : (r.status === 'running' ? 'text-blue-600' : 'text-red-600'); %>
-              <span class="<%= cls %> font-medium"><%= r.status %></span>
-            </td>
-            <td class="px-4 py-2 text-gray-500"><%= r.started_at %></td>
-            <td class="px-4 py-2 font-mono text-xs"><%= r.exit_code ?? '—' %></td>
-            <td class="px-4 py-2"><a href="/runs/<%= r.id %>" class="text-blue-600 hover:underline">View</a></td>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50/80">
+          <tr>
+            <th class="th">Run</th>
+            <th class="th hidden sm:table-cell">Job</th>
+            <th class="th">Status</th>
+            <th class="th">Started (<%= tz %>)</th>
+            <th class="th hidden md:table-cell">Duration</th>
+            <th class="th hidden md:table-cell">Exit</th>
           </tr>
-        <% }) %>
-      </tbody>
-    </table>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% runs.forEach(r => { %>
+            <tr class="cursor-pointer transition hover:bg-slate-50/80" onclick="location.href='/runs/<%= r.id %>'">
+              <td class="td"><a href="/runs/<%= r.id %>" class="font-mono text-xs font-medium text-indigo-600 hover:text-indigo-500">#<%= r.id %></a><div class="mt-0.5 text-xs font-medium text-slate-900 sm:hidden"><%= r.job_name %></div></td>
+              <td class="td hidden font-medium text-slate-900 sm:table-cell"><%= r.job_name %></td>
+              <td class="td"><%- statusBadge(r.status) %></td>
+              <td class="td whitespace-nowrap">
+                <div class="text-slate-700"><%= fmtTime(r.started_at) %></div>
+                <div class="text-xs text-slate-400"><%= fromNow(r.started_at) %></div>
+              </td>
+              <td class="td hidden whitespace-nowrap font-mono text-xs text-slate-600 md:table-cell"><%= duration(r.started_at, r.finished_at) %></td>
+              <td class="td hidden font-mono text-xs md:table-cell <%= r.exit_code ? 'text-rose-600' : 'text-slate-500' %>"><%= r.exit_code ?? '—' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
   </div>
 <% } %>
 

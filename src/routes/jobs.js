@@ -2,46 +2,73 @@
 
 const express = require('express');
 const { getDb } = require('../db');
-const { scheduleJob, unscheduleJob, runJobNow } = require('../scheduler');
+const { scheduleJob, unscheduleJob, runJobNow, isJobRunning, getNextRun } = require('../scheduler');
+const { validateJob } = require('../validate');
+const schedule = require('../schedule');
+const { formatTime, relativeTime } = require('../time');
 
 const router = express.Router();
 
-// List all jobs.
+// List all jobs with their latest run and next scheduled time.
 router.get('/', (req, res) => {
-  const jobs = getDb().prepare('SELECT * FROM jobs ORDER BY id DESC').all();
-  res.render('jobs/index', { jobs });
+  const jobs = getDb()
+    .prepare(
+      `SELECT j.*, r.id AS last_run_id, r.status AS last_status, r.started_at AS last_started_at
+         FROM jobs j
+         LEFT JOIN runs r ON r.id = (SELECT MAX(id) FROM runs WHERE job_id = j.id)
+        ORDER BY j.id DESC`
+    )
+    .all()
+    .map((job) => ({
+      ...job,
+      running: isJobRunning(job.id),
+      next_run: getNextRun(job.id),
+      schedule_text: schedule.describe(job.cron_schedule),
+    }));
+  res.render('jobs/index', { jobs, notice: req.query.notice || null });
 });
+
+function allSecrets(db) {
+  return db.prepare('SELECT id, name FROM secrets ORDER BY name').all();
+}
 
 // New job form.
 router.get('/new', (req, res) => {
-  const secrets = getDb().prepare('SELECT id, name FROM secrets ORDER BY name').all();
-  res.render('jobs/new', { secrets });
+  const job = { name: '', command: '', working_dir: '', enabled: 1, timeout_sec: 300, schedule: schedule.defaultFields() };
+  res.render('jobs/new', { job, secrets: allSecrets(getDb()), linkedIds: new Set(), errors: [] });
 });
 
 // Create a job.
 router.post('/', (req, res) => {
-  const { name, command, working_dir, cron_schedule, enabled, timeout_sec, secret_ids } = req.body;
-  if (!name || !command) {
-    return res.status(400).send('Name and command are required.');
-  }
   const db = getDb();
-  const insert = db.prepare(
-    `INSERT INTO jobs (name, command, working_dir, cron_schedule, enabled, timeout_sec)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  const info = insert.run(
-    name,
-    command,
-    working_dir || null,
-    cron_schedule || null,
-    enabled ? 1 : 0,
-    Number(timeout_sec) || 300
-  );
-  const jobId = info.lastInsertRowid;
+  const { values, errors } = validateJob(req.body);
+  if (errors.length) {
+    return res
+      .status(400)
+      .render('jobs/new', { job: values, secrets: allSecrets(db), linkedIds: new Set(values.secret_ids), errors });
+  }
+  const info = db
+    .prepare(
+      `INSERT INTO jobs (name, command, working_dir, cron_schedule, enabled, timeout_sec)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(values.name, values.command, values.working_dir, values.cron_schedule, values.enabled, values.timeout_sec);
+  const jobId = Number(info.lastInsertRowid);
 
-  linkSecrets(db, jobId, secret_ids);
-  scheduleJob(getDb().prepare('SELECT * FROM jobs WHERE id = ?').get(jobId));
+  linkSecrets(db, jobId, values.secret_ids);
+  scheduleJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId));
   res.redirect('/jobs');
+});
+
+// Live preview for the schedule builder: { cron, description, next: [IST strings], error }.
+router.get('/schedule-preview', (req, res) => {
+  const built = schedule.buildFromForm(req.query);
+  if (built.error) return res.json({ error: built.error });
+  res.json({
+    cron: built.cron,
+    description: schedule.describe(built.cron),
+    next: schedule.nextRuns(built.cron, 3).map((d) => `${formatTime(d)} (${relativeTime(d)})`),
+  });
 });
 
 // Edit form.
@@ -49,53 +76,85 @@ router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
   if (!job) return res.status(404).send('Job not found');
-  const secrets = db.prepare('SELECT id, name FROM secrets ORDER BY name').all();
   const linked = db.prepare('SELECT secret_id AS id FROM job_secrets WHERE job_id = ?').all(job.id);
   const linkedIds = new Set(linked.map((r) => r.id));
-  res.render('jobs/edit', { job, secrets, linkedIds });
+  job.schedule = schedule.parseToFields(job.cron_schedule);
+  res.render('jobs/edit', { job, secrets: allSecrets(db), linkedIds, errors: [] });
 });
 
 // Update a job.
 router.post('/:id', (req, res) => {
   const db = getDb();
-  const { name, command, working_dir, cron_schedule, enabled, timeout_sec, secret_ids } = req.body;
-  db.prepare(
-    `UPDATE jobs
-        SET name = ?, command = ?, working_dir = ?, cron_schedule = ?,
-            enabled = ?, timeout_sec = ?
-      WHERE id = ?`
-  ).run(
-    name,
-    command,
-    working_dir || null,
-    cron_schedule || null,
-    enabled ? 1 : 0,
-    Number(timeout_sec) || 300,
-    req.params.id
-  );
-  db.prepare('DELETE FROM job_secrets WHERE job_id = ?').run(req.params.id);
-  linkSecrets(db, req.params.id, secret_ids);
-  scheduleJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id));
+  const existing = db.prepare('SELECT id FROM jobs WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).send('Job not found');
+
+  const { values, errors } = validateJob(req.body);
+  if (errors.length) {
+    return res.status(400).render('jobs/edit', {
+      job: { ...values, id: existing.id },
+      secrets: allSecrets(db),
+      linkedIds: new Set(values.secret_ids),
+      errors,
+    });
+  }
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      `UPDATE jobs
+          SET name = ?, command = ?, working_dir = ?, cron_schedule = ?,
+              enabled = ?, timeout_sec = ?
+        WHERE id = ?`
+    ).run(
+      values.name,
+      values.command,
+      values.working_dir,
+      values.cron_schedule,
+      values.enabled,
+      values.timeout_sec,
+      existing.id
+    );
+    db.prepare('DELETE FROM job_secrets WHERE job_id = ?').run(existing.id);
+    linkSecrets(db, existing.id, values.secret_ids);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  scheduleJob(db.prepare('SELECT * FROM jobs WHERE id = ?').get(existing.id));
   res.redirect('/jobs');
 });
 
 // Manually trigger a job.
 router.post('/:id/run', (req, res) => {
-  runJobNow(Number(req.params.id));
-  res.redirect('/jobs');
+  try {
+    const { runId } = runJobNow(Number(req.params.id));
+    res.redirect(`/runs/${runId}`);
+  } catch (err) {
+    if (err.code === 'ALREADY_RUNNING') {
+      return res.redirect(`/jobs?notice=${encodeURIComponent(err.message)}`);
+    }
+    if (/not found/.test(err.message)) return res.status(404).send('Job not found');
+    throw err;
+  }
 });
 
 // Delete a job.
 router.post('/:id/delete', (req, res) => {
-  unscheduleJob(Number(req.params.id));
-  getDb().prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
+  const id = Number(req.params.id);
+  if (isJobRunning(id)) {
+    return res.redirect(`/jobs?notice=${encodeURIComponent('Cancel the running job before deleting it.')}`);
+  }
+  unscheduleJob(id);
+  getDb().prepare('DELETE FROM jobs WHERE id = ?').run(id);
   res.redirect('/jobs');
 });
 
 function linkSecrets(db, jobId, secretIds) {
-  const link = db.prepare('INSERT OR IGNORE INTO job_secrets (job_id, secret_id) VALUES (?, ?)');
-  const ids = Array.isArray(secretIds) ? secretIds : secretIds ? [secretIds] : [];
-  for (const id of ids) link.run(jobId, Number(id));
+  const link = db.prepare(
+    'INSERT OR IGNORE INTO job_secrets (job_id, secret_id) SELECT ?, id FROM secrets WHERE id = ?'
+  );
+  for (const id of secretIds) link.run(jobId, id);
 }
 
 module.exports = router;

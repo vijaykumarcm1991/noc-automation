@@ -1,0 +1,11 @@
+<% if (errors && errors.length) { %>
+  <div class="mb-6 flex gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+    <%- icon('alert', 'h-5 w-5 flex-none text-rose-500') %>
+    <div>
+      <p class="font-medium">Please fix the following:</p>
+      <ul class="mt-1 list-disc space-y-0.5 pl-5">
+        <% errors.forEach(e => { %><li><%= e %></li><% }) %>
+      </ul>
+    </div>
+  </div>
+<% } %>

@@ -3,34 +3,40 @@
 const express = require('express');
 const { getDb } = require('../db');
 const { encrypt } = require('../vault');
+const { validateSecretName } = require('../validate');
 
 const router = express.Router();
 
-// List all secrets (names only, never values).
+// List all secrets (names only, never values) with how many jobs use each.
 router.get('/', (req, res) => {
   const secrets = getDb()
-    .prepare('SELECT id, name, created_at, updated_at FROM secrets ORDER BY name')
+    .prepare(
+      `SELECT s.id, s.name, s.created_at, s.updated_at,
+              (SELECT COUNT(*) FROM job_secrets js WHERE js.secret_id = s.id) AS job_count
+         FROM secrets s
+        ORDER BY s.name`
+    )
     .all();
   res.render('secrets/index', { secrets });
 });
 
 // New secret form.
 router.get('/new', (req, res) => {
-  res.render('secrets/new');
+  res.render('secrets/new', { name: '', error: null });
 });
 
 // Create a secret (value encrypted before hitting disk).
 router.post('/', (req, res) => {
-  const { name, value } = req.body;
-  if (!name || !value) {
-    return res.status(400).send('Name and value are required.');
+  const { value: name, error } = validateSecretName(req.body && req.body.name);
+  const value = (req.body && req.body.value) || '';
+  if (error || !value) {
+    return res.status(400).render('secrets/new', { name, error: error || 'Value is required.' });
   }
-  const enc = encrypt(value);
   try {
-    getDb().prepare('INSERT INTO secrets (name, encrypted_value) VALUES (?, ?)').run(name, enc);
+    getDb().prepare('INSERT INTO secrets (name, encrypted_value) VALUES (?, ?)').run(name, encrypt(value));
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) {
-      return res.status(400).send(`A secret named "${name}" already exists.`);
+      return res.status(400).render('secrets/new', { name, error: `A secret named "${name}" already exists.` });
     }
     throw err;
   }
@@ -43,25 +49,28 @@ router.post('/:id/delete', (req, res) => {
   res.redirect('/secrets');
 });
 
+function findSecret(id) {
+  return getDb().prepare('SELECT id, name, updated_at FROM secrets WHERE id = ?').get(id);
+}
+
 // Edit secret form (change its value; name stays fixed).
 router.get('/:id/edit', (req, res) => {
-  const secret = getDb()
-    .prepare('SELECT id, name, updated_at FROM secrets WHERE id = ?')
-    .get(req.params.id);
+  const secret = findSecret(req.params.id);
   if (!secret) return res.status(404).send('Secret not found');
-  res.render('secrets/edit', { secret });
+  res.render('secrets/edit', { secret, error: null });
 });
 
 // Update a secret's value (re-encrypted before hitting disk).
 router.post('/:id/edit', (req, res) => {
-  const { value } = req.body;
+  const secret = findSecret(req.params.id);
+  if (!secret) return res.status(404).send('Secret not found');
+  const value = (req.body && req.body.value) || '';
   if (!value) {
-    return res.status(400).send('Value is required.');
+    return res.status(400).render('secrets/edit', { secret, error: 'Value is required.' });
   }
-  const enc = encrypt(value);
   getDb()
     .prepare("UPDATE secrets SET encrypted_value = ?, updated_at = datetime('now') WHERE id = ?")
-    .run(enc, req.params.id);
+    .run(encrypt(value), secret.id);
   res.redirect('/secrets');
 });
 

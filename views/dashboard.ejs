@@ -1,30 +1,113 @@
-<%- include('partials/header', { title: 'Dashboard' }) %>
+<%- include('partials/header', { title: 'Dashboard', refresh: runningCount ? 10 : 0 }) %>
 
-<h1 class="text-2xl font-bold mb-6">Dashboard</h1>
-
-<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-  <a href="/jobs" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
-    <div class="text-4xl font-bold text-slate-800"><%= jobCount %></div>
-    <div class="text-gray-500 mt-1">Jobs</div>
-  </a>
-  <a href="/secrets" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
-    <div class="text-4xl font-bold text-slate-800"><%= secretCount %></div>
-    <div class="text-gray-500 mt-1">Secrets</div>
-  </a>
-  <a href="/runs" class="bg-white p-6 rounded-lg shadow text-center hover:bg-gray-50">
-    <div class="text-4xl font-bold text-slate-800"><%= runCount %></div>
-    <div class="text-gray-500 mt-1">Total Runs</div>
-  </a>
+<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+    <p class="mt-1 text-sm text-slate-500">Overview of your automation jobs. All times in <%= tz %>.</p>
+  </div>
+  <a href="/jobs/new" class="btn-primary self-start sm:self-auto"><%- icon('plus') %> New job</a>
 </div>
 
-<div class="bg-white p-6 rounded-lg shadow">
-  <h2 class="text-lg font-semibold mb-2">Getting started</h2>
-  <ol class="list-decimal list-inside text-gray-700 space-y-1">
-    <li>Create a <a href="/secrets/new" class="text-blue-600 underline">secret</a> in the vault.</li>
-    <li>Create a <a href="/jobs/new" class="text-blue-600 underline">job</a> that runs a command (e.g. <code class="bg-gray-100 px-1 rounded">python3 script.py</code>) and link the secret(s) it needs.</li>
-    <li>Trigger the job with <strong>Run now</strong>, or set a cron schedule and enable it.</li>
-    <li>Watch the output in <a href="/runs" class="text-blue-600 underline">Run history</a>. Linked secrets are injected as environment variables at run time.</li>
-  </ol>
+<%
+  const stats = [
+    { label: 'Jobs', value: jobCount, href: '/jobs', icon: 'zap', tone: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Running now', value: runningCount, href: '/runs?status=running', icon: 'activity', tone: runningCount ? 'bg-sky-50 text-sky-600' : 'bg-slate-100 text-slate-500' },
+    { label: 'Problems (24h)', value: failedCount, href: '/runs?status=problems', icon: 'alert', tone: failedCount ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-500' },
+    { label: 'Success rate (7d)', value: successRate === null ? '—' : successRate + '%', href: '/runs', icon: 'check', tone: 'bg-emerald-50 text-emerald-600' },
+  ];
+%>
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <% stats.forEach(s => { %>
+    <a href="<%= s.href %>" class="card group flex items-center gap-4 p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+      <div class="flex h-11 w-11 flex-none items-center justify-center rounded-xl <%= s.tone %>">
+        <%- icon(s.icon, 'h-5 w-5') %>
+      </div>
+      <div class="min-w-0">
+        <div class="text-sm text-slate-500"><%= s.label %></div>
+        <div class="text-2xl font-semibold tabular-nums tracking-tight"><%= s.value %></div>
+      </div>
+    </a>
+  <% }) %>
 </div>
+
+<div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
+  <section class="card lg:col-span-3">
+    <div class="card-header">
+      <h2 class="card-title">Recent runs</h2>
+      <a href="/runs" class="text-sm link">View all <%= runCount %> &rarr;</a>
+    </div>
+    <% if (recentRuns.length === 0) { %>
+      <div class="px-5 py-12 text-center text-sm text-slate-500">
+        <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400"><%- icon('history', 'h-5 w-5') %></div>
+        No runs yet. Trigger a job to see it here.
+      </div>
+    <% } else { %>
+      <ul class="divide-y divide-slate-100">
+        <% recentRuns.forEach(r => { %>
+          <li>
+            <a href="/runs/<%= r.id %>" class="flex items-center gap-4 px-5 py-3 transition hover:bg-slate-50">
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm font-medium text-slate-900"><%= r.job_name %></div>
+                <div class="text-xs text-slate-500" title="<%= fmtTime(r.started_at) %> <%= tz %>">
+                  #<%= r.id %> · <%= fromNow(r.started_at) %> · <%= duration(r.started_at, r.finished_at) %>
+                </div>
+              </div>
+              <%- statusBadge(r.status) %>
+            </a>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card lg:col-span-2">
+    <div class="card-header">
+      <h2 class="card-title">Upcoming scheduled runs</h2>
+      <span class="text-xs text-slate-400"><%= tz %></span>
+    </div>
+    <% if (upcoming.length === 0) { %>
+      <div class="px-5 py-12 text-center text-sm text-slate-500">
+        <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400"><%- icon('calendar', 'h-5 w-5') %></div>
+        No scheduled jobs. Add a cron schedule to a job.
+      </div>
+    <% } else { %>
+      <ul class="divide-y divide-slate-100">
+        <% upcoming.forEach(j => { %>
+          <li class="flex items-center gap-3 px-5 py-3">
+            <div class="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-slate-100 text-slate-500"><%- icon('clock', 'h-4 w-4') %></div>
+            <div class="min-w-0 flex-1">
+              <a href="/jobs/<%= j.id %>/edit" class="block truncate text-sm font-medium text-slate-900 hover:text-indigo-600"><%= j.name %></a>
+              <div class="text-xs text-slate-500"><%= fmtTime(j.next_run) %> · <%= describeSchedule(j.cron_schedule) %></div>
+            </div>
+            <span class="text-xs font-medium text-slate-500"><%= fromNow(j.next_run) %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<% if (jobCount === 0 || secretCount === 0) { %>
+  <section class="card mt-6 p-6">
+    <h2 class="card-title">Getting started</h2>
+    <ol class="mt-4 grid gap-4 sm:grid-cols-3">
+      <% [
+        ['1', 'Add a secret', 'Store credentials encrypted in the vault.', '/secrets/new'],
+        ['2', 'Create a job', 'Set a command, a schedule, and the secrets it needs.', '/jobs/new'],
+        ['3', 'Watch it run', 'Trigger it manually or let the schedule run it.', '/runs'],
+      ].forEach(([n, t, d, href]) => { %>
+        <li>
+          <a href="<%= href %>" class="flex h-full gap-3 rounded-lg border border-slate-200 p-4 transition hover:border-indigo-300 hover:bg-indigo-50/40">
+            <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-indigo-600 text-xs font-semibold text-white"><%= n %></span>
+            <span>
+              <span class="block text-sm font-medium text-slate-900"><%= t %></span>
+              <span class="mt-0.5 block text-xs text-slate-500"><%= d %></span>
+            </span>
+          </a>
+        </li>
+      <% }) %>
+    </ol>
+  </section>
+<% } %>
 
 <%- include('partials/footer') %>

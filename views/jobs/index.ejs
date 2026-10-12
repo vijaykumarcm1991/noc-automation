@@ -1,50 +1,101 @@
-<%- include('../partials/header', { title: 'Jobs' }) %>
+<%- include('../partials/header', { title: 'Jobs', refresh: jobs.some(j => j.running) ? 5 : 0 }) %>
 
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold">Jobs</h1>
-  <a href="/jobs/new" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">+ New Job</a>
+<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Jobs</h1>
+    <p class="mt-1 text-sm text-slate-500">Commands that run on a schedule or on demand. Schedules use <%= tz %>.</p>
+  </div>
+  <a href="/jobs/new" class="btn-primary self-start sm:self-auto"><%- icon('plus') %> New job</a>
 </div>
 
+<% if (notice) { %>
+  <div class="mb-6 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+    <%- icon('alert', 'h-5 w-5 flex-none text-amber-500') %> <span><%= notice %></span>
+  </div>
+<% } %>
+
 <% if (jobs.length === 0) { %>
-  <p class="text-gray-500">No jobs yet. <a href="/jobs/new" class="text-blue-600 underline">Create one</a>.</p>
+  <div class="card px-6 py-16 text-center">
+    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><%- icon('zap', 'h-6 w-6') %></div>
+    <h2 class="mt-4 text-base font-semibold">No jobs yet</h2>
+    <p class="mt-1 text-sm text-slate-500">Create your first job to start automating.</p>
+    <a href="/jobs/new" class="btn-primary mt-6"><%- icon('plus') %> New job</a>
+  </div>
 <% } else { %>
-  <div class="bg-white rounded-lg shadow overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-left text-gray-500">
-        <tr>
-          <th class="px-4 py-2">Name</th>
-          <th class="px-4 py-2">Command</th>
-          <th class="px-4 py-2">Schedule</th>
-          <th class="px-4 py-2">Status</th>
-          <th class="px-4 py-2">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% jobs.forEach(job => { %>
-          <tr class="border-t">
-            <td class="px-4 py-2 font-medium"><%= job.name %></td>
-            <td class="px-4 py-2 font-mono text-xs"><%= job.command %></td>
-            <td class="px-4 py-2 font-mono text-xs"><%= job.cron_schedule || '—' %></td>
-            <td class="px-4 py-2">
-              <% if (job.enabled) { %>
-                <span class="text-green-600 font-medium">Enabled</span>
-              <% } else { %>
-                <span class="text-gray-400">Disabled</span>
-              <% } %>
-            </td>
-            <td class="px-4 py-2 flex gap-2">
-              <form method="post" action="/jobs/<%= job.id %>/run">
-                <button class="text-blue-600 hover:underline">Run now</button>
-              </form>
-              <a href="/jobs/<%= job.id %>/edit" class="text-blue-600 hover:underline">Edit</a>
-              <form method="post" action="/jobs/<%= job.id %>/delete" onsubmit="return confirm('Delete this job?');">
-                <button class="text-red-600 hover:underline">Delete</button>
-              </form>
-            </td>
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50/80">
+          <tr>
+            <th class="th">Job</th>
+            <th class="th hidden md:table-cell">Schedule</th>
+            <th class="th hidden sm:table-cell">Last run</th>
+            <th class="th text-right"><span class="sr-only">Actions</span></th>
           </tr>
-        <% }) %>
-      </tbody>
-    </table>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <% jobs.forEach(job => { %>
+            <tr class="transition hover:bg-slate-50/60">
+              <td class="td max-w-xs">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-slate-900"><%= job.name %></span>
+                  <% if (job.running) { %><%- statusBadge('running') %><% } %>
+                </div>
+                <code class="mt-1 block max-w-[9.5rem] truncate font-mono text-xs text-slate-500 sm:max-w-xs" title="<%= job.command %>"><%= job.command %></code>
+                <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 md:hidden">
+                  <% if (job.last_status && !job.running) { %><span class="sm:hidden"><%- statusBadge(job.last_status) %></span><% } %>
+                  <span><%= job.cron_schedule ? (job.enabled && job.next_run ? 'Next ' + fromNow(job.next_run) : (job.enabled ? job.schedule_text : 'Paused')) : 'Manual' %></span>
+                </div>
+              </td>
+              <td class="td hidden whitespace-nowrap md:table-cell">
+                <% if (!job.cron_schedule) { %>
+                  <span class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Manual</span>
+                <% } else { %>
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-medium text-slate-700" title="cron: <%= job.cron_schedule %>"><%= job.schedule_text %></span>
+                    <% if (!job.enabled) { %><span class="text-xs font-medium text-slate-400">Paused</span><% } %>
+                  </div>
+                  <% if (job.enabled && job.next_run) { %>
+                    <div class="mt-1 text-xs text-slate-500" title="<%= fmtTime(job.next_run) %> <%= tz %>">Next <%= fromNow(job.next_run) %> · <%= fmtClock(job.next_run) %> <%= tz %></div>
+                  <% } %>
+                <% } %>
+              </td>
+              <td class="td hidden whitespace-nowrap sm:table-cell">
+                <% if (job.last_run_id) { %>
+                  <a href="/runs/<%= job.last_run_id %>" class="inline-flex flex-col gap-1">
+                    <%- statusBadge(job.last_status) %>
+                    <span class="text-xs text-slate-500" title="<%= fmtTime(job.last_started_at) %> <%= tz %>"><%= fromNow(job.last_started_at) %></span>
+                  </a>
+                <% } else { %>
+                  <span class="text-xs text-slate-400">Never run</span>
+                <% } %>
+              </td>
+              <td class="td">
+                <div class="flex items-center justify-end gap-1">
+                  <% if (job.running) { %>
+                    <form method="post" action="/runs/<%= job.last_run_id %>/cancel" onsubmit="return confirm('Cancel this run?');">
+                      <%- include('../partials/csrf') %>
+                      <button class="btn-warn px-2.5 py-1.5 text-xs" title="Cancel run"><%- icon('stop', 'h-3.5 w-3.5') %><span class="hidden sm:inline">Cancel</span></button>
+                    </form>
+                  <% } else { %>
+                    <form method="post" action="/jobs/<%= job.id %>/run">
+                      <%- include('../partials/csrf') %>
+                      <button class="btn-secondary px-2.5 py-1.5 text-xs" title="Run now"><%- icon('play', 'h-3.5 w-3.5') %><span class="hidden sm:inline">Run now</span></button>
+                    </form>
+                  <% } %>
+                  <a href="/runs?job=<%= job.id %>" class="icon-btn hidden sm:inline-flex" title="Run history" aria-label="Run history"><%- icon('history') %></a>
+                  <a href="/jobs/<%= job.id %>/edit" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('pencil') %></a>
+                  <form method="post" action="/jobs/<%= job.id %>/delete" onsubmit="return confirm('Delete this job and its run history?');">
+                    <%- include('../partials/csrf') %>
+                    <button class="icon-btn hover:bg-rose-50 hover:text-rose-600" title="Delete" aria-label="Delete"><%- icon('trash') %></button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
   </div>
 <% } %>
 

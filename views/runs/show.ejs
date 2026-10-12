@@ -1,34 +1,76 @@
-<%- include('../partials/header', { title: 'Run #' + run.id }) %>
+<%- include('../partials/header', { title: 'Run #' + run.id, refresh: run.status === 'running' ? 3 : 0 }) %>
 
-<a href="/runs" class="text-blue-600 hover:underline text-sm">&larr; Back to history</a>
-
-<h1 class="text-2xl font-bold mt-2 mb-4">Run #<%= run.id %> — <%= run.job_name %></h1>
-
-<div class="bg-white rounded-lg shadow p-4 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
   <div>
-    <div class="text-gray-500">Status</div>
-    <% const cls = run.status === 'success' ? 'text-green-600' : (run.status === 'running' ? 'text-blue-600' : 'text-red-600'); %>
-    <div class="font-semibold <%= cls %>"><%= run.status %></div>
+    <a href="/runs?job=<%= run.job_id %>" class="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"><%- icon('back') %> Run history</a>
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="text-2xl font-semibold tracking-tight"><%= run.job_name %></h1>
+      <%- statusBadge(run.status) %>
+    </div>
+    <p class="mt-1 font-mono text-sm text-slate-500">Run #<%= run.id %></p>
   </div>
-  <div>
-    <div class="text-gray-500">Started</div>
-    <div><%= run.started_at %></div>
-  </div>
-  <div>
-    <div class="text-gray-500">Finished</div>
-    <div><%= run.finished_at || '—' %></div>
-  </div>
-  <div>
-    <div class="text-gray-500">Exit code</div>
-    <div class="font-mono"><%= run.exit_code ?? '—' %></div>
+  <div class="flex items-center gap-2">
+    <a href="/jobs/<%= run.job_id %>/edit" class="btn-secondary"><%- icon('pencil') %> Edit job</a>
+    <% if (run.status === 'running') { %>
+      <form method="post" action="/runs/<%= run.id %>/cancel" onsubmit="return confirm('Cancel this run?');">
+        <%- include('../partials/csrf') %>
+        <button class="btn-warn"><%- icon('stop') %> Cancel run</button>
+      </form>
+    <% } else { %>
+      <form method="post" action="/jobs/<%= run.job_id %>/run">
+        <%- include('../partials/csrf') %>
+        <button class="btn-primary"><%- icon('rerun') %> Run again</button>
+      </form>
+    <% } %>
   </div>
 </div>
 
-<h2 class="text-lg font-semibold mb-2">Output</h2>
-<% if (run.output) { %>
-  <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto whitespace-pre-wrap"><%= run.output %></pre>
-<% } else { %>
-  <p class="text-gray-500">No output captured.</p>
+<dl class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <% [
+    ['Started', fmtTime(run.started_at), fromNow(run.started_at)],
+    ['Finished', run.finished_at ? fmtTime(run.finished_at) : '—', run.finished_at ? fromNow(run.finished_at) : (run.status === 'running' ? 'in progress' : '')],
+    ['Duration', duration(run.started_at, run.finished_at), run.status === 'running' ? 'so far' : ''],
+    ['Exit code', run.exit_code ?? '—', run.exit_code === 0 ? 'OK' : (run.exit_code ? 'non-zero' : '')],
+  ].forEach(([label, value, sub]) => { %>
+    <div class="card p-4">
+      <dt class="text-xs font-medium uppercase tracking-wide text-slate-500"><%= label %><%= label === 'Started' || label === 'Finished' ? ' (' + tz + ')' : '' %></dt>
+      <dd class="mt-1.5 font-mono text-sm font-medium text-slate-900"><%= value %></dd>
+      <% if (sub) { %><dd class="mt-0.5 text-xs text-slate-400"><%= sub %></dd><% } %>
+    </div>
+  <% }) %>
+</dl>
+
+<section class="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm">
+  <div class="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+    <div class="flex items-center gap-3">
+      <div class="flex gap-1.5">
+        <span class="h-3 w-3 rounded-full bg-rose-500/80"></span>
+        <span class="h-3 w-3 rounded-full bg-amber-400/80"></span>
+        <span class="h-3 w-3 rounded-full bg-emerald-500/80"></span>
+      </div>
+      <span class="flex items-center gap-1.5 text-xs font-medium text-slate-400"><%- icon('terminal', 'h-3.5 w-3.5') %> Output</span>
+      <% if (run.status === 'running') { %>
+        <span class="flex items-center gap-1.5 text-xs text-sky-400"><span class="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400"></span> live · refreshing</span>
+      <% } %>
+    </div>
+    <% if (run.output) { %>
+      <button type="button" data-copy="#run-output" class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-white/10 hover:text-white">
+        <%- icon('copy', 'h-3.5 w-3.5') %> <span data-copy-label>Copy</span>
+      </button>
+    <% } %>
+  </div>
+  <% if (run.output) { %>
+    <pre id="run-output" class="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-slate-200"><%= run.output.replace(/^\n+/, '') %></pre>
+  <% } else { %>
+    <p class="p-4 font-mono text-xs text-slate-500"><%= run.status === 'running' ? 'Waiting for output…' : 'No output captured.' %></p>
+  <% } %>
+</section>
+
+<% if (run.status === 'running') { %>
+  <script>
+    // Keep the log scrolled to the bottom while the run is live.
+    (function () { var o = document.getElementById('run-output'); if (o) o.scrollTop = o.scrollHeight; })();
+  </script>
 <% } %>
 
 <%- include('../partials/footer') %>

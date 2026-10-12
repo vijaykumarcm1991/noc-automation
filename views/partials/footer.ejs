@@ -1,3 +1,47 @@
-  </main>
+    </main>
+  </div>
+
+  <script>
+    // Mobile sidebar toggle.
+    (function () {
+      var nav = document.querySelector('[data-nav]');
+      var backdrop = document.querySelector('[data-nav-backdrop]');
+      function toggle() {
+        var open = nav.classList.toggle('flex');
+        nav.classList.toggle('hidden', !open);
+        backdrop.classList.toggle('hidden', !open);
+      }
+      document.querySelectorAll('[data-nav-toggle]').forEach(function (b) { b.addEventListener('click', toggle); });
+      backdrop.addEventListener('click', toggle);
+    })();
+
+    // Live clock in the app time zone.
+    (function () {
+      var clock = document.querySelector('[data-clock]');
+      var dateEl = document.querySelector('[data-clock-date]');
+      if (!clock) return;
+      var tz = clock.getAttribute('data-tz');
+      var t = new Intl.DateTimeFormat('en-IN', { timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      var d = new Intl.DateTimeFormat('en-IN', { timeZone: tz, weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+      function tick() { var now = new Date(); clock.textContent = t.format(now); if (dateEl) dateEl.textContent = d.format(now); }
+      tick();
+      setInterval(tick, 1000);
+    })();
+
+    // Copy-to-clipboard buttons: <button data-copy="#target">.
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = document.querySelector(btn.getAttribute('data-copy'));
+        if (!target || !navigator.clipboard) return;
+        navigator.clipboard.writeText(target.innerText).then(function () {
+          var label = btn.querySelector('[data-copy-label]');
+          if (!label) return;
+          var old = label.textContent;
+          label.textContent = 'Copied';
+          setTimeout(function () { label.textContent = old; }, 1500);
+        });
+      });
+    });
+  </script>
 </body>
 </html>

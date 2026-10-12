@@ -1,0 +1,74 @@
+<%- include('../partials/errors', { errors }) %>
+
+<form method="post" action="<%= action %>" class="card max-w-3xl">
+  <%- include('../partials/csrf') %>
+
+  <div class="space-y-8 p-6">
+    <section class="grid gap-5">
+      <div>
+        <h2 class="card-title">Basics</h2>
+        <p class="hint mt-0.5">What runs, and where.</p>
+      </div>
+      <div>
+        <label class="label" for="name">Name</label>
+        <input id="name" name="name" required value="<%= job.name %>" placeholder="JSM daily report" class="input">
+      </div>
+      <div>
+        <label class="label" for="command">Command</label>
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400"><%- icon('terminal') %></span>
+          <input id="command" name="command" required value="<%= job.command %>" placeholder="python3 jsm_daily.py" class="input pl-9 font-mono">
+        </div>
+        <p class="hint">Runs through a shell with <code class="font-mono">TZ=<%= appTz %></code>. Linked secrets are injected as environment variables.</p>
+      </div>
+      <div>
+        <label class="label" for="working_dir">Working directory <span class="font-normal text-slate-400">(optional)</span></label>
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400"><%- icon('folder') %></span>
+          <input id="working_dir" name="working_dir" value="<%= job.working_dir || '' %>" placeholder="./scripts" class="input pl-9 font-mono">
+        </div>
+      </div>
+    </section>
+
+    <%- include('_schedule') %>
+
+    <section class="grid gap-5 border-t border-slate-100 pt-8">
+      <div>
+        <h2 class="card-title">Limits</h2>
+        <p class="hint mt-0.5">Runs longer than this are stopped and marked as timed out.</p>
+      </div>
+      <div class="max-w-xs">
+        <label class="label" for="timeout_sec">Timeout</label>
+        <div class="relative">
+          <input id="timeout_sec" name="timeout_sec" type="number" min="1" value="<%= job.timeout_sec %>" class="input pr-12">
+          <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-400">sec</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid gap-4 border-t border-slate-100 pt-8">
+      <div>
+        <h2 class="card-title">Secrets</h2>
+        <p class="hint mt-0.5">Selected secrets are decrypted at run time and exported under their own names.</p>
+      </div>
+      <% if (secrets.length === 0) { %>
+        <p class="text-sm text-slate-500">No secrets yet. <a href="/secrets/new" class="link">Add one</a>.</p>
+      <% } else { %>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <% secrets.forEach(s => { %>
+            <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 transition hover:bg-slate-50 has-[:checked]:border-indigo-300 has-[:checked]:bg-indigo-50/50">
+              <input type="checkbox" name="secret_ids" value="<%= s.id %>" <%= linkedIds.has(s.id) ? 'checked' : '' %> class="h-4 w-4 rounded border-slate-300 text-indigo-600 accent-indigo-600">
+              <span class="text-slate-400"><%- icon('key', 'h-3.5 w-3.5') %></span>
+              <span class="truncate font-mono text-sm text-slate-800"><%= s.name %></span>
+            </label>
+          <% }) %>
+        </div>
+      <% } %>
+    </section>
+  </div>
+
+  <div class="flex items-center justify-end gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50/70 px-6 py-4">
+    <a href="/jobs" class="btn-secondary">Cancel</a>
+    <button type="submit" class="btn-primary"><%= submitLabel %></button>
+  </div>
+</form>

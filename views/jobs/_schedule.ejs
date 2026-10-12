@@ -1,0 +1,198 @@
+<% const sc = job.schedule; %>
+<section class="grid gap-5 border-t border-slate-100 pt-8" data-schedule>
+  <div>
+    <h2 class="card-title">Schedule</h2>
+    <p class="hint mt-0.5">When should this job run? Times are in <%= tz %>.</p>
+  </div>
+
+  <!-- Schedule type -->
+  <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <% [
+      ['manual', 'Manual only', 'play'],
+      ['minutes', 'Every few minutes', 'activity'],
+      ['hourly', 'Hourly', 'clock'],
+      ['daily', 'Daily', 'calendar'],
+      ['weekly', 'Weekly', 'calendar'],
+      ['monthly', 'Monthly', 'calendar'],
+      ['custom', 'Advanced (cron)', 'terminal'],
+    ].forEach(([value, label, ic]) => { %>
+      <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700 has-[:checked]:ring-1 has-[:checked]:ring-indigo-400">
+        <input type="radio" name="schedule_type" value="<%= value %>" <%= sc.type === value ? 'checked' : '' %> class="sr-only">
+        <%- icon(ic, 'h-4 w-4 flex-none') %>
+        <span class="font-medium"><%= label %></span>
+      </label>
+    <% }) %>
+  </div>
+
+  <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+    <!-- Manual -->
+    <p data-panel="manual" class="text-sm text-slate-600 <%= sc.type === 'manual' ? '' : 'hidden' %>">
+      This job only runs when you press <strong>Run now</strong>.
+    </p>
+
+    <!-- Every N minutes -->
+    <div data-panel="minutes" class="flex flex-wrap items-center gap-2 text-sm text-slate-700 <%= sc.type === 'minutes' ? '' : 'hidden' %>">
+      Run every
+      <select name="interval_min" class="input w-auto py-1.5">
+        <% [1, 2, 5, 10, 15, 20, 30].forEach(n => { %>
+          <option value="<%= n %>" <%= sc.interval_min === n ? 'selected' : '' %>><%= n %></option>
+        <% }) %>
+      </select>
+      minute(s)
+    </div>
+
+    <!-- Hourly -->
+    <div data-panel="hourly" class="flex flex-wrap items-center gap-2 text-sm text-slate-700 <%= sc.type === 'hourly' ? '' : 'hidden' %>">
+      Run every
+      <select name="interval_hours" class="input w-auto py-1.5">
+        <% [1, 2, 3, 4, 6, 8, 12].forEach(n => { %>
+          <option value="<%= n %>" <%= sc.interval_hours === n ? 'selected' : '' %>><%= n === 1 ? 'hour' : n + ' hours' %></option>
+        <% }) %>
+      </select>
+      at minute
+      <select name="at_minute" class="input w-auto py-1.5">
+        <% for (let m = 0; m < 60; m += 5) { %>
+          <option value="<%= m %>" <%= sc.at_minute === m ? 'selected' : '' %>>:<%= String(m).padStart(2, '0') %></option>
+        <% } %>
+        <% if (sc.at_minute % 5) { %><option value="<%= sc.at_minute %>" selected>:<%= String(sc.at_minute).padStart(2, '0') %></option><% } %>
+      </select>
+      past the hour
+    </div>
+
+    <!-- Weekly: days -->
+    <div data-panel="weekly" class="mb-4 <%= sc.type === 'weekly' ? '' : 'hidden' %>">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span class="text-sm font-medium text-slate-700">On these days</span>
+        <span class="flex gap-3 text-xs">
+          <button type="button" data-days="1,2,3,4,5" class="link">Weekdays</button>
+          <button type="button" data-days="0,6" class="link">Weekends</button>
+          <button type="button" data-days="0,1,2,3,4,5,6" class="link">Every day</button>
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        <% [1, 2, 3, 4, 5, 6, 0].forEach(d => { %>
+          <label class="cursor-pointer">
+            <input type="checkbox" name="days" value="<%= d %>" <%= sc.days.includes(d) ? 'checked' : '' %> class="peer sr-only">
+            <span class="flex h-10 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-600 transition hover:border-indigo-300 peer-checked:border-indigo-600 peer-checked:bg-indigo-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500"><%= ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d] %></span>
+          </label>
+        <% }) %>
+      </div>
+    </div>
+
+    <!-- Monthly: day of month -->
+    <div data-panel="monthly" class="mb-4 flex flex-wrap items-center gap-2 text-sm text-slate-700 <%= sc.type === 'monthly' ? '' : 'hidden' %>">
+      On
+      <select name="month_day" class="input w-auto py-1.5">
+        <% for (let d = 1; d <= 31; d++) { %>
+          <option value="<%= d %>" <%= sc.month_day === String(d) ? 'selected' : '' %>>day <%= d %></option>
+        <% } %>
+        <option value="L" <%= sc.month_day === 'L' ? 'selected' : '' %>>the last day</option>
+      </select>
+      of every month
+      <% if (sc.month_day !== 'L' && Number(sc.month_day) > 28) { %><span class="text-xs text-amber-600">Months without that day are skipped.</span><% } %>
+    </div>
+
+    <!-- Time (daily / weekly / monthly) -->
+    <div data-panel="daily weekly monthly" class="flex flex-wrap items-center gap-2 text-sm text-slate-700 <%= ['daily', 'weekly', 'monthly'].includes(sc.type) ? '' : 'hidden' %>">
+      <span class="font-medium">At</span>
+      <input type="time" name="time" value="<%= sc.time %>" step="60" class="input w-auto py-1.5 font-mono">
+      <span class="text-xs text-slate-500"><%= tz %>, 24-hour</span>
+      <span class="flex flex-wrap gap-1.5">
+        <% ['00:30', '06:00', '09:00', '12:00', '18:00'].forEach(t => { %>
+          <button type="button" data-time="<%= t %>" class="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-700"><%= t %></button>
+        <% }) %>
+      </span>
+    </div>
+
+    <!-- Advanced -->
+    <div data-panel="custom" class="<%= sc.type === 'custom' ? '' : 'hidden' %>">
+      <label class="label" for="schedule_custom">Cron expression</label>
+      <input id="schedule_custom" name="schedule_custom" value="<%= sc.custom %>" placeholder="0 9 * * 1-5" class="input font-mono">
+      <p class="hint">Fields: <code class="font-mono">minute hour day-of-month month day-of-week</code>, with an optional leading seconds field.</p>
+    </div>
+  </div>
+
+  <!-- Live preview -->
+  <div data-preview class="flex gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 <%= sc.type === 'manual' ? 'hidden' : '' %>">
+    <span class="mt-0.5 text-indigo-500"><%- icon('calendar', 'h-5 w-5') %></span>
+    <div class="min-w-0 text-sm">
+      <div class="font-medium text-indigo-900" data-preview-text><%= job.cron_schedule ? describeSchedule(job.cron_schedule) : '' %></div>
+      <div class="mt-0.5 font-mono text-xs text-indigo-700/70" data-preview-cron><%= job.cron_schedule || '' %></div>
+      <ul class="mt-2 space-y-0.5 text-xs text-slate-600" data-preview-next></ul>
+    </div>
+  </div>
+
+  <!-- Pause toggle -->
+  <div data-panel="minutes hourly daily weekly monthly custom" class="<%= sc.type === 'manual' ? 'hidden' : '' %>">
+    <label class="inline-flex cursor-pointer items-center gap-3">
+      <input id="enabled" name="enabled" type="checkbox" value="1" <%= job.enabled ? 'checked' : '' %> class="peer sr-only">
+      <span class="relative h-5 w-9 flex-none rounded-full bg-slate-300 transition peer-checked:bg-indigo-600 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-4"></span>
+      <span class="text-sm text-slate-700">Schedule active <span class="text-slate-400">(turn off to pause without losing the schedule)</span></span>
+    </label>
+  </div>
+</section>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-schedule]');
+    var form = root.closest('form');
+    var preview = root.querySelector('[data-preview]');
+    var timer;
+
+    function type() { var r = root.querySelector('input[name="schedule_type"]:checked'); return r ? r.value : 'manual'; }
+
+    function showPanels() {
+      var t = type();
+      root.querySelectorAll('[data-panel]').forEach(function (p) {
+        p.classList.toggle('hidden', p.getAttribute('data-panel').split(' ').indexOf(t) === -1);
+      });
+      preview.classList.toggle('hidden', t === 'manual');
+    }
+
+    function refreshPreview() {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        if (type() === 'manual') return;
+        var params = new URLSearchParams();
+        new FormData(form).forEach(function (v, k) {
+          if (['schedule_type', 'interval_min', 'interval_hours', 'at_minute', 'time', 'days', 'month_day', 'schedule_custom'].indexOf(k) !== -1) params.append(k, v);
+        });
+        fetch('/jobs/schedule-preview?' + params.toString(), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var text = root.querySelector('[data-preview-text]');
+            var cronEl = root.querySelector('[data-preview-cron]');
+            var list = root.querySelector('[data-preview-next]');
+            list.innerHTML = '';
+            preview.classList.toggle('border-rose-200', !!data.error);
+            preview.classList.toggle('bg-rose-50', !!data.error);
+            if (data.error) { text.textContent = data.error; cronEl.textContent = ''; return; }
+            text.textContent = data.description;
+            cronEl.textContent = 'cron: ' + data.cron;
+            data.next.forEach(function (n, i) {
+              var li = document.createElement('li');
+              li.textContent = (i === 0 ? 'Next: ' : 'Then: ') + n;
+              list.appendChild(li);
+            });
+          })
+          .catch(function () {});
+      }, 150);
+    }
+
+    root.addEventListener('change', function () { showPanels(); refreshPreview(); });
+    root.addEventListener('input', refreshPreview);
+    root.querySelectorAll('[data-days]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var days = b.getAttribute('data-days').split(',');
+        root.querySelectorAll('input[name="days"]').forEach(function (c) { c.checked = days.indexOf(c.value) !== -1; });
+        refreshPreview();
+      });
+    });
+    root.querySelectorAll('[data-time]').forEach(function (b) {
+      b.addEventListener('click', function () { root.querySelector('input[name="time"]').value = b.getAttribute('data-time'); refreshPreview(); });
+    });
+
+    showPanels();
+    refreshPreview();
+  })();
+</script>
