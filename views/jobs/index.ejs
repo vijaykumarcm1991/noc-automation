@@ -41,7 +41,11 @@
                   <span class="font-medium text-slate-900"><%= job.name %></span>
                   <% if (job.running) { %><%- statusBadge('running') %><% } %>
                 </div>
-                <code class="mt-1 block max-w-[9.5rem] truncate font-mono text-xs text-slate-500 sm:max-w-xs" title="<%= job.command %>"><%= job.command %></code>
+                <% if (job.script_id && job.script_filename) { %>
+                  <a href="/scripts/<%= job.script_id %>" class="mt-1 flex max-w-[9.5rem] items-center gap-1 truncate font-mono text-xs text-indigo-600 hover:text-indigo-500 sm:max-w-xs" title="Open <%= job.script_filename %> in the editor"><%- icon('code', 'h-3.5 w-3.5 flex-none') %><span class="truncate"><%= job.script_filename %><%= job.args ? ' ' + job.args : '' %></span></a>
+                <% } else { %>
+                  <code class="mt-1 block max-w-[9.5rem] truncate font-mono text-xs text-slate-500 sm:max-w-xs" title="<%= job.command %>"><%= job.command %></code>
+                <% } %>
                 <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 md:hidden">
                   <% if (job.last_status && !job.running) { %><span class="sm:hidden"><%- statusBadge(job.last_status) %></span><% } %>
                   <span><%= job.cron_schedule ? (job.enabled && job.next_run ? 'Next ' + fromNow(job.next_run) : (job.enabled ? job.schedule_text : 'Paused')) : 'Manual' %></span>

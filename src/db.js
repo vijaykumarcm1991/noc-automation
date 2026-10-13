@@ -59,9 +59,69 @@ function initDb(dbPath) {
       sess    TEXT NOT NULL,
       expires INTEGER NOT NULL
     );
+
+    -- Scripts managed from the UI. The file in SCRIPTS_DIR is the live copy;
+    -- every save is also kept in script_versions.
+    CREATE TABLE IF NOT EXISTS scripts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      filename    TEXT NOT NULL UNIQUE,
+      language    TEXT NOT NULL,
+      description TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS script_versions (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      script_id  INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+      content    TEXT NOT NULL,
+      note       TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_versions_script ON script_versions(script_id, id);
+
+    -- Test runs started from the script editor (kept apart from job runs).
+    CREATE TABLE IF NOT EXISTS script_tests (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      script_id   INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+      args        TEXT,
+      status      TEXT NOT NULL,
+      started_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      finished_at TEXT,
+      exit_code   INTEGER,
+      output      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_tests_script ON script_tests(script_id, id);
+
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      at      TEXT NOT NULL DEFAULT (datetime('now')),
+      action  TEXT NOT NULL,
+      target  TEXT,
+      detail  TEXT
+    );
   `);
 
+  // Columns added after the first release.
+  addColumn('jobs', 'script_id', 'INTEGER REFERENCES scripts(id)');
+  addColumn('jobs', 'args', 'TEXT');
+
+  // A crash mid-test leaves 'running' rows behind too.
+  db.exec(
+    "UPDATE script_tests SET status = 'interrupted', finished_at = datetime('now') WHERE status = 'running'"
+  );
+
   return db;
+}
+
+function addColumn(table, column, definition) {
+  const exists = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  if (!exists) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+// Record an action in the audit log.
+function audit(action, target, detail = null) {
+  getDb().prepare('INSERT INTO audit_log (action, target, detail) VALUES (?, ?, ?)').run(action, target, detail);
 }
 
 // Runs left in 'running' belong to a previous process that died mid-run;
@@ -91,4 +151,4 @@ function getDb() {
   return db;
 }
 
-module.exports = { initDb, getDb, markInterruptedRuns, pruneRuns };
+module.exports = { initDb, getDb, markInterruptedRuns, pruneRuns, audit };

@@ -13,16 +13,51 @@
         <label class="label" for="name">Name</label>
         <input id="name" name="name" required value="<%= job.name %>" placeholder="JSM daily report" class="input">
       </div>
-      <div>
+      <div data-run-type>
+        <span class="label">What to run</span>
+        <div class="grid grid-cols-2 gap-2 sm:max-w-md">
+          <% [['script', 'A script from the library', 'code'], ['command', 'A shell command', 'terminal']].forEach(([v, l, ic]) => { %>
+            <label class="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700 has-[:checked]:ring-1 has-[:checked]:ring-indigo-400">
+              <input type="radio" name="run_type" value="<%= v %>" <%= (job.run_type || 'command') === v ? 'checked' : '' %> class="sr-only">
+              <%- icon(ic, 'h-4 w-4 flex-none') %> <span class="font-medium"><%= l %></span>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+
+      <div data-run-panel="script" class="grid gap-4 sm:grid-cols-2 <%= (job.run_type || 'command') === 'script' ? '' : 'hidden' %>">
+        <div>
+          <label class="label" for="script_id">Script</label>
+          <% if (!scripts.length) { %>
+            <p class="text-sm text-slate-500">No scripts yet. <a href="/scripts" class="link">Create one</a>.</p>
+          <% } else { %>
+            <select id="script_id" name="script_id" class="input font-mono">
+              <option value="">Choose a script…</option>
+              <% scripts.forEach(sc => { %>
+                <option value="<%= sc.id %>" <%= job.script_id === sc.id ? 'selected' : '' %>><%= sc.filename %><%= sc.description ? ' — ' + sc.description : '' %></option>
+              <% }) %>
+            </select>
+            <% if (job.script_id) { %><a href="/scripts/<%= job.script_id %>" class="mt-1.5 inline-flex items-center gap-1 text-xs link"><%- icon('code', 'h-3.5 w-3.5') %> Open in editor</a><% } %>
+          <% } %>
+        </div>
+        <div>
+          <label class="label" for="args">Arguments <span class="font-normal text-slate-400">(optional)</span></label>
+          <input id="args" name="args" value="<%= job.args || '' %>" placeholder="--report daily" class="input font-mono">
+        </div>
+        <p class="hint sm:col-span-2 -mt-2">Runs the saved script with <code class="font-mono">TZ=<%= appTz %></code>, using the managed virtualenv for Python when one exists. Editing the script updates this job automatically.</p>
+      </div>
+
+      <div data-run-panel="command" class="<%= (job.run_type || 'command') === 'command' ? '' : 'hidden' %>">
         <label class="label" for="command">Command</label>
         <div class="relative">
           <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400"><%- icon('terminal') %></span>
-          <input id="command" name="command" required value="<%= job.command %>" placeholder="python3 jsm_daily.py" class="input pl-9 font-mono">
+          <input id="command" name="command" value="<%= job.run_type === 'command' ? job.command : '' %>" placeholder="df -h && ./check.sh" class="input pl-9 font-mono">
         </div>
         <p class="hint">Runs through a shell with <code class="font-mono">TZ=<%= appTz %></code>. Linked secrets are injected as environment variables.</p>
       </div>
+
       <div>
-        <label class="label" for="working_dir">Working directory <span class="font-normal text-slate-400">(optional)</span></label>
+        <label class="label" for="working_dir">Working directory <span class="font-normal text-slate-400">(optional — scripts default to the scripts folder)</span></label>
         <div class="relative">
           <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400"><%- icon('folder') %></span>
           <input id="working_dir" name="working_dir" value="<%= job.working_dir || '' %>" placeholder="./scripts" class="input pl-9 font-mono">
@@ -72,3 +107,16 @@
     <button type="submit" class="btn-primary"><%= submitLabel %></button>
   </div>
 </form>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-run-type]');
+    if (!root) return;
+    root.addEventListener('change', function () {
+      var t = root.querySelector('input[name="run_type"]:checked').value;
+      document.querySelectorAll('[data-run-panel]').forEach(function (p) {
+        p.classList.toggle('hidden', p.getAttribute('data-run-panel') !== t);
+      });
+    });
+  })();
+</script>

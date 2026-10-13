@@ -1,0 +1,315 @@
+<%- include('../partials/header', { title: script.filename, wide: true }) %>
+
+<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div class="min-w-0">
+    <a href="/scripts" class="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"><%- icon('back') %> Scripts</a>
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="truncate font-mono text-xl font-semibold tracking-tight"><%= script.filename %></h1>
+      <span class="rounded-md px-2 py-0.5 text-xs font-semibold <%= script.language === 'bash' ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700' %>"><%= script.language === 'bash' ? 'Bash' : 'Python' %></span>
+      <span data-save-state class="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Saved</span>
+    </div>
+    <form method="post" action="/scripts/<%= script.id %>/description" class="group mt-1 flex items-center gap-2">
+      <%- include('../partials/csrf') %>
+      <input name="description" value="<%= script.description || '' %>" placeholder="Add a description…" class="w-full max-w-xl rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm text-slate-500 hover:border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none" onchange="this.form.submit()">
+    </form>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <input data-note maxlength="200" placeholder="Change note (optional)" class="input w-56 py-1.5 text-xs">
+    <button type="button" data-check class="btn-secondary py-1.5"><%- icon('tick') %> Check syntax</button>
+    <button type="button" data-save class="btn-primary py-1.5" title="Ctrl+S"><%- icon('save') %> Save <kbd class="ml-1 hidden rounded bg-white/20 px-1 font-mono text-[10px] sm:inline">Ctrl S</kbd></button>
+    <a href="/scripts/<%= script.id %>/history" class="btn-secondary py-1.5"><%- icon('history') %> History <span data-version-count class="rounded bg-slate-100 px-1.5 text-xs text-slate-600"><%= versionCount %></span></a>
+    <form method="post" action="/scripts/<%= script.id %>/delete" onsubmit="return confirm('Delete <%= script.filename %>? The file and its version history will be removed.');">
+      <%- include('../partials/csrf') %>
+      <button class="icon-btn hover:bg-rose-50 hover:text-rose-600" title="Delete script" aria-label="Delete script"><%- icon('trash') %></button>
+    </form>
+  </div>
+</div>
+
+<% if (notice) { %>
+  <div class="mb-4 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+    <%- icon('alert', 'h-5 w-5 flex-none text-amber-500') %> <span><%= notice %></span>
+  </div>
+<% } %>
+
+<div data-message class="mb-4 hidden rounded-xl border p-3 text-sm"></div>
+
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+  <div class="min-w-0 space-y-6">
+    <!-- Editor -->
+    <div class="overflow-hidden rounded-xl border border-slate-800 bg-[#282c34] shadow-sm">
+      <div class="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-slate-400">
+        <span class="flex min-w-0 items-center gap-2" title="<%= filePath %>"><%- icon('file', 'h-3.5 w-3.5 flex-none') %> <span class="truncate font-mono" dir="rtl"><span dir="ltr"><%= filePath %></span></span></span>
+        <span data-cursor class="ml-4 flex-none whitespace-nowrap font-mono"></span>
+      </div>
+      <div data-editor class="h-[60vh] min-h-[360px]"></div>
+    </div>
+
+    <!-- Output -->
+    <section class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1.5 text-xs font-medium text-slate-400"><%- icon('terminal', 'h-3.5 w-3.5') %> Test output</span>
+          <span data-test-status class="text-xs text-slate-500">Run a test to see output here.</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" data-copy="#test-output" class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"><%- icon('copy', 'h-3.5 w-3.5') %> <span data-copy-label>Copy</span></button>
+          <button type="button" data-cancel class="hidden items-center gap-1.5 rounded-md bg-amber-500/90 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-500"><%- icon('stop', 'h-3.5 w-3.5') %> Cancel</button>
+        </div>
+      </div>
+      <pre id="test-output" data-output class="h-72 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-slate-200"></pre>
+    </section>
+  </div>
+
+  <aside class="space-y-6">
+    <!-- Test panel -->
+    <section class="card">
+      <div class="card-header"><h2 class="card-title">Test run</h2></div>
+      <div class="space-y-4 p-5">
+        <div>
+          <label class="label" for="test-args">Arguments</label>
+          <input id="test-args" data-args placeholder="--dry-run 10" class="input font-mono">
+        </div>
+        <div>
+          <span class="label">Secrets to inject</span>
+          <% if (!secrets.length) { %>
+            <p class="text-xs text-slate-500">No secrets in the vault. <a href="/secrets/new" class="link">Add one</a>.</p>
+          <% } else { %>
+            <div class="max-h-44 space-y-1.5 overflow-auto">
+              <% secrets.forEach(s => { %>
+                <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-slate-50">
+                  <input type="checkbox" data-secret value="<%= s.id %>" class="h-4 w-4 rounded border-slate-300 accent-indigo-600">
+                  <span class="truncate font-mono text-xs text-slate-700"><%= s.name %></span>
+                </label>
+              <% }) %>
+            </div>
+          <% } %>
+        </div>
+        <div>
+          <label class="label" for="test-timeout">Timeout</label>
+          <div class="relative">
+            <input id="test-timeout" data-timeout type="number" min="1" max="3600" value="300" class="input pr-12">
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-400">sec</span>
+          </div>
+        </div>
+        <button type="button" data-run class="btn-primary w-full"><%- icon('play') %> Run test</button>
+        <p class="text-xs text-slate-500">Runs what's in the editor now, even if unsaved, with <code class="font-mono">TZ=<%= appTz %></code>. Interpreter: <code class="break-all font-mono"><%= script.language === 'bash' ? 'bash' : pythonBin %></code></p>
+      </div>
+    </section>
+
+    <!-- Scheduling -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">Scheduled jobs</h2>
+        <button type="button" data-schedule class="link text-sm">+ Schedule</button>
+      </div>
+      <% if (!jobs.length) { %>
+        <div class="p-5">
+          <p class="text-sm text-slate-500">This script isn't scheduled yet.</p>
+          <button type="button" data-schedule class="btn-secondary mt-3 w-full"><%- icon('calendar') %> Schedule this script</button>
+        </div>
+      <% } else { %>
+        <ul class="divide-y divide-slate-100">
+          <% jobs.forEach(j => { %>
+            <li class="flex items-center justify-between gap-3 px-5 py-3">
+              <div class="min-w-0">
+                <a href="/jobs/<%= j.id %>/edit" class="block truncate text-sm font-medium text-slate-900 hover:text-indigo-600"><%= j.name %></a>
+                <div class="text-xs text-slate-500"><%= j.cron_schedule ? (j.enabled ? describeSchedule(j.cron_schedule) : 'Paused') : 'Manual only' %></div>
+              </div>
+              <a href="/runs?job=<%= j.id %>" class="icon-btn" title="Run history"><%- icon('history') %></a>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </section>
+
+    <!-- Recent tests -->
+    <section class="card">
+      <div class="card-header"><h2 class="card-title">Recent tests</h2></div>
+      <ul data-tests class="divide-y divide-slate-100">
+        <% if (!tests.length) { %><li data-no-tests class="px-5 py-4 text-sm text-slate-500">No test runs yet.</li><% } %>
+        <% tests.forEach(t => { %>
+          <li>
+            <a href="/scripts/<%= script.id %>/tests/<%= t.id %>" class="flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-slate-50">
+              <span class="min-w-0">
+                <span class="block truncate font-mono text-xs text-slate-600"><%= t.args || '(no args)' %></span>
+                <span class="text-xs text-slate-400"><%= fromNow(t.started_at) %> · <%= duration(t.started_at, t.finished_at) %></span>
+              </span>
+              <%- statusBadge(t.status) %>
+            </a>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+  </aside>
+</div>
+
+<script type="application/json" id="script-content"><%- JSON.stringify(content).replace(/</g, '\\u003c') %></script>
+<script src="/vendor/editor.js"></script>
+<script src="/js/tasks.js"></script>
+<script>
+  (function () {
+    var scriptId = <%= script.id %>;
+    var language = <%- JSON.stringify(script.language) %>;
+    var saved = JSON.parse(document.getElementById('script-content').textContent);
+    var dirty = false;
+    var $ = function (sel) { return document.querySelector(sel); };
+    var stateEl = $('[data-save-state]');
+    var msgEl = $('[data-message]');
+
+    var editor = NocEditor.create($('[data-editor]'), {
+      doc: saved,
+      language: language,
+      onChange: function (text) { setDirty(text !== saved); editor.setError(null); },
+      onSave: save,
+    });
+    window.scriptEditor = editor; // handy from the browser console
+    editor.view.dom.addEventListener('keyup', updateCursor);
+    editor.view.dom.addEventListener('mouseup', updateCursor);
+    updateCursor();
+
+    function updateCursor() {
+      var pos = editor.view.state.selection.main.head;
+      var line = editor.view.state.doc.lineAt(pos);
+      $('[data-cursor]').textContent = 'Ln ' + line.number + ', Col ' + (pos - line.from + 1);
+    }
+
+    function setState(kind, text) {
+      var styles = {
+        saved: ['text-emerald-600', 'bg-emerald-500'],
+        dirty: ['text-amber-600', 'bg-amber-500'],
+        busy: ['text-slate-500', 'bg-slate-400 animate-pulse'],
+        error: ['text-rose-600', 'bg-rose-500'],
+      }[kind];
+      stateEl.className = 'inline-flex items-center gap-1.5 text-xs font-medium ' + styles[0];
+      stateEl.innerHTML = '<span class="h-1.5 w-1.5 rounded-full ' + styles[1] + '"></span>';
+      stateEl.appendChild(document.createTextNode(text));
+    }
+
+    function setDirty(value) {
+      dirty = value;
+      setState(dirty ? 'dirty' : 'saved', dirty ? 'Unsaved changes' : 'Saved');
+    }
+
+    function message(kind, text) {
+      if (!text) { msgEl.classList.add('hidden'); return; }
+      msgEl.className = 'mb-4 rounded-xl border p-3 text-sm ' +
+        (kind === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-white text-slate-700');
+      msgEl.textContent = text;
+    }
+
+    function save() {
+      var content = editor.getValue();
+      setState('busy', 'Saving…');
+      NocTasks.postJSON('/scripts/' + scriptId + '/save', { content: content, note: $('[data-note]').value })
+        .then(function (r) {
+          if (r.error) {
+            setState('error', 'Not saved');
+            message('error', 'Not saved — ' + r.error);
+            if (r.line) editor.setError(r.line, r.error);
+            return;
+          }
+          saved = content;
+          setDirty(editor.getValue() !== saved);
+          $('[data-note]').value = '';
+          if (r.versionCount) $('[data-version-count]').textContent = r.versionCount;
+          message('ok', r.unchanged ? 'No changes to save.' : 'Saved as version ' + r.versionCount + '.');
+          setTimeout(function () { message(null); }, 2500);
+        })
+        .catch(function () { setState('error', 'Save failed'); message('error', 'Could not reach the server.'); });
+    }
+
+    $('[data-save]').addEventListener('click', save);
+
+    $('[data-check]').addEventListener('click', function () {
+      NocTasks.postJSON('/scripts/' + scriptId + '/check', { content: editor.getValue() }).then(function (r) {
+        if (r.ok) { editor.setError(null); message('ok', r.skipped ? 'Syntax check skipped: ' + r.skipped : 'No syntax errors found.'); }
+        else { message('error', r.error); if (r.line) editor.setError(r.line, r.error); }
+      });
+    });
+
+    // --- Test runs ---
+    var runBtn = $('[data-run]');
+    var cancelBtn = $('[data-cancel]');
+    var statusEl = $('[data-test-status]');
+    var current = null;
+
+    function selectedSecrets() {
+      return Array.prototype.map.call(document.querySelectorAll('[data-secret]:checked'), function (c) { return c.value; });
+    }
+
+    runBtn.addEventListener('click', function () {
+      if (current) return;
+      runBtn.disabled = true;
+      statusEl.className = 'flex items-center gap-1.5 text-xs text-sky-400';
+      statusEl.innerHTML = '<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400"></span> Starting…';
+      NocTasks.postJSON('/scripts/' + scriptId + '/test', {
+        content: editor.getValue(),
+        args: $('[data-args]').value,
+        secret_ids: selectedSecrets(),
+        timeout_sec: $('[data-timeout]').value,
+      }).then(function (r) {
+        if (r.error || !r.taskId) {
+          runBtn.disabled = false;
+          statusEl.className = 'text-xs text-rose-400';
+          statusEl.textContent = r.error || 'Could not start the test.';
+          return;
+        }
+        statusEl.innerHTML = '<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-400"></span> Running…';
+        cancelBtn.classList.remove('hidden');
+        cancelBtn.classList.add('flex');
+        var started = Date.now();
+        current = NocTasks.stream(r.taskId, $('[data-output]'), {
+          onEnd: function (d, text) {
+            current = null;
+            runBtn.disabled = false;
+            cancelBtn.classList.add('hidden');
+            cancelBtn.classList.remove('flex');
+            var secs = ((Date.now() - started) / 1000).toFixed(1);
+            var ok = d.status === 'success';
+            statusEl.className = 'text-xs ' + (ok ? 'text-emerald-400' : 'text-rose-400');
+            statusEl.textContent = text + (d.exitCode !== null && d.exitCode !== undefined ? ' (exit ' + d.exitCode + ')' : '') + ' · ' + secs + 's';
+            addTestRow(r.testId, d.status);
+          },
+        });
+      });
+    });
+
+    cancelBtn.addEventListener('click', function () { if (current) current.cancel(); });
+
+    function addTestRow(testId, status) {
+      var none = document.querySelector('[data-no-tests]');
+      if (none) none.remove();
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '/scripts/' + scriptId + '/tests/' + testId;
+      a.className = 'flex items-center justify-between gap-3 px-5 py-2.5 hover:bg-slate-50';
+      var left = document.createElement('span');
+      left.className = 'min-w-0';
+      left.innerHTML = '<span class="block truncate font-mono text-xs text-slate-600"></span><span class="text-xs text-slate-400">just now</span>';
+      left.firstChild.textContent = $('[data-args]').value || '(no args)';
+      var badge = document.createElement('span');
+      badge.className = 'text-xs font-medium ' + (status === 'success' ? 'text-emerald-600' : 'text-rose-600');
+      badge.textContent = status.replace('_', ' ');
+      a.appendChild(left);
+      a.appendChild(badge);
+      li.appendChild(a);
+      $('[data-tests]').prepend(li);
+    }
+
+    // --- Schedule this script ---
+    document.querySelectorAll('[data-schedule]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (dirty && !confirm('You have unsaved changes. Jobs run the saved file — continue without saving?')) return;
+        var params = new URLSearchParams({ script_id: scriptId, args: $('[data-args]').value });
+        selectedSecrets().forEach(function (id) { params.append('secret_ids', id); });
+        location.href = '/jobs/new?' + params.toString();
+      });
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+      if (dirty) { e.preventDefault(); e.returnValue = ''; }
+    });
+  })();
+</script>
+
+<%- include('../partials/footer') %>

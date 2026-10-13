@@ -3,6 +3,10 @@ node_modules/
 data/
 *.log
 
+# Temporary copies written for script test runs
+scripts/.~test-*
+scripts/.*.tmp-*
+
 # Python build artifacts
 __pycache__/
 *.pyc

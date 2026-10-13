@@ -1,0 +1,123 @@
+<%- include('../partials/header', { title: 'Scripts' }) %>
+
+<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Scripts</h1>
+    <p class="mt-1 text-sm text-slate-500">Write, test and schedule Python and Bash scripts. Files live in <code class="break-all font-mono text-xs text-slate-600"><%= scriptsDir %></code>.</p>
+  </div>
+  <button type="button" data-open-new class="btn-primary flex-none self-start whitespace-nowrap sm:self-auto"><%- icon('plus') %> New script</button>
+</div>
+
+<!-- New script panel -->
+<div data-new-panel class="card mb-6 <%= error ? '' : 'hidden' %>">
+  <div class="card-header">
+    <h2 class="card-title">New script</h2>
+    <button type="button" data-close-new class="icon-btn" aria-label="Close"><%- icon('x') %></button>
+  </div>
+  <form method="post" action="/scripts" class="space-y-5 p-5">
+    <%- include('../partials/csrf') %>
+    <%- include('../partials/errors', { errors: error ? [error] : [] }) %>
+    <div class="grid gap-5 sm:grid-cols-[1fr_auto]">
+      <div>
+        <label class="label" for="filename">File name</label>
+        <input id="filename" name="filename" required value="<%= form.filename %>" placeholder="daily_health_check" autocomplete="off" class="input font-mono">
+        <p class="hint">Letters, digits, dot, dash and underscore. The extension is added from the language if you leave it off.</p>
+      </div>
+      <div>
+        <span class="label">Language</span>
+        <div class="flex gap-2">
+          <% [['python', 'Python'], ['bash', 'Bash']].forEach(([v, l], i) => { %>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 has-[:checked]:border-indigo-400 has-[:checked]:bg-indigo-50 has-[:checked]:text-indigo-700">
+              <input type="radio" name="language" value="<%= v %>" <%= i === 0 ? 'checked' : '' %> class="sr-only"> <%= l %>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+    <div>
+      <label class="label" for="description">Description <span class="font-normal text-slate-400">(optional)</span></label>
+      <input id="description" name="description" value="<%= form.description %>" placeholder="What does this script do?" class="input">
+    </div>
+    <div class="flex justify-end gap-2">
+      <button type="button" data-close-new class="btn-secondary">Cancel</button>
+      <button type="submit" class="btn-primary">Create and open editor</button>
+    </div>
+  </form>
+</div>
+
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+  <div class="xl:col-span-2">
+    <% if (scripts.length === 0) { %>
+      <div class="card px-6 py-16 text-center">
+        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><%- icon('code', 'h-6 w-6') %></div>
+        <h2 class="mt-4 text-base font-semibold">No scripts yet</h2>
+        <p class="mt-1 text-sm text-slate-500">Create a script from a template and start writing.</p>
+        <button type="button" data-open-new class="btn-primary mt-6"><%- icon('plus') %> New script</button>
+      </div>
+    <% } else { %>
+      <div class="card overflow-hidden">
+        <ul class="divide-y divide-slate-100">
+          <% scripts.forEach(s => { %>
+            <li>
+              <a href="/scripts/<%= s.id %>" class="flex items-center gap-4 px-5 py-4 transition hover:bg-slate-50">
+                <span class="flex h-10 w-10 flex-none items-center justify-center rounded-lg font-mono text-xs font-semibold <%= s.language === 'bash' ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700' %>"><%= s.language === 'bash' ? 'SH' : 'PY' %></span>
+                <div class="min-w-0 flex-1">
+                  <div class="truncate font-mono text-sm font-medium text-slate-900"><%= s.filename %></div>
+                  <div class="truncate text-xs text-slate-500">
+                    <%= s.description || 'No description' %>
+                  </div>
+                  <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400">
+                    <span title="<%= fmtTime(s.updated_at) %> <%= tz %>">Edited <%= fromNow(s.updated_at) %></span>
+                    <span><%= s.version_count %> version<%= s.version_count === 1 ? '' : 's' %></span>
+                    <span><%= s.job_count ? s.job_count + ' job' + (s.job_count === 1 ? '' : 's') : 'Not scheduled' %></span>
+                  </div>
+                </div>
+                <div class="hidden flex-none text-right sm:block">
+                  <% if (s.last_test_status) { %>
+                    <%- statusBadge(s.last_test_status) %>
+                    <div class="mt-1 text-xs text-slate-400">tested <%= fromNow(s.last_test_at) %></div>
+                  <% } else { %>
+                    <span class="text-xs text-slate-400">Not tested yet</span>
+                  <% } %>
+                </div>
+                <span class="text-slate-300"><%- icon('chevron') %></span>
+              </a>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+  </div>
+
+  <section class="card h-fit">
+    <div class="card-header"><h2 class="card-title">Recent activity</h2><span class="text-xs text-slate-400"><%= tz %></span></div>
+    <% if (!activity.length) { %>
+      <p class="px-5 py-8 text-center text-sm text-slate-500">Nothing yet.</p>
+    <% } else { %>
+      <ul class="divide-y divide-slate-100">
+        <% const labels = { 'script.create': 'Created', 'script.save': 'Saved', 'script.delete': 'Deleted', 'script.import': 'Imported', 'script.external_change': 'Changed outside tool', 'script.restore_file': 'Recreated missing file', 'packages.install': 'Installed packages', 'packages.uninstall': 'Uninstalled', 'packages.create_venv': 'Created virtualenv', 'packages.save_requirements': 'Saved requirements' }; %>
+        <% activity.forEach(a => { %>
+          <li class="px-5 py-3">
+            <div class="text-sm"><span class="font-medium text-slate-800"><%= labels[a.action] || a.action %></span> <span class="font-mono text-xs text-slate-600"><%= a.target %></span></div>
+            <% if (a.detail) { %><div class="truncate text-xs text-slate-500"><%= a.detail %></div><% } %>
+            <div class="text-xs text-slate-400" title="<%= fmtTime(a.at) %> <%= tz %>"><%= fromNow(a.at) %></div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<script>
+  (function () {
+    var panel = document.querySelector('[data-new-panel]');
+    document.querySelectorAll('[data-open-new]').forEach(function (b) {
+      b.addEventListener('click', function () { panel.classList.remove('hidden'); document.getElementById('filename').focus(); });
+    });
+    document.querySelectorAll('[data-close-new]').forEach(function (b) {
+      b.addEventListener('click', function () { panel.classList.add('hidden'); });
+    });
+  })();
+</script>
+
+<%- include('../partials/footer') %>

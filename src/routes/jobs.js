@@ -13,9 +13,11 @@ const router = express.Router();
 router.get('/', (req, res) => {
   const jobs = getDb()
     .prepare(
-      `SELECT j.*, r.id AS last_run_id, r.status AS last_status, r.started_at AS last_started_at
+      `SELECT j.*, r.id AS last_run_id, r.status AS last_status, r.started_at AS last_started_at,
+              s.filename AS script_filename
          FROM jobs j
          LEFT JOIN runs r ON r.id = (SELECT MAX(id) FROM runs WHERE job_id = j.id)
+         LEFT JOIN scripts s ON s.id = j.script_id
         ORDER BY j.id DESC`
     )
     .all()
@@ -32,10 +34,32 @@ function allSecrets(db) {
   return db.prepare('SELECT id, name FROM secrets ORDER BY name').all();
 }
 
-// New job form.
+function allScripts(db) {
+  return db.prepare('SELECT id, filename, language, description FROM scripts ORDER BY filename').all();
+}
+
+function renderForm(res, view, { job, linkedIds, errors = [], status = 200 }) {
+  const db = getDb();
+  res.status(status).render(view, { job, secrets: allSecrets(db), scripts: allScripts(db), linkedIds, errors });
+}
+
+// New job form. Accepts ?script_id=&args=&secret_ids= to prefill from the script editor.
 router.get('/new', (req, res) => {
-  const job = { name: '', command: '', working_dir: '', enabled: 1, timeout_sec: 300, schedule: schedule.defaultFields() };
-  res.render('jobs/new', { job, secrets: allSecrets(getDb()), linkedIds: new Set(), errors: [] });
+  const db = getDb();
+  const script = req.query.script_id ? db.prepare('SELECT * FROM scripts WHERE id = ?').get(Number(req.query.script_id)) : null;
+  const ids = [].concat(req.query.secret_ids || []).map(Number).filter(Number.isInteger);
+  const job = {
+    name: script ? script.filename.replace(/\.(py|sh)$/, '').replace(/[_-]+/g, ' ') : '',
+    run_type: script || (allScripts(db).length && !req.query.command) ? 'script' : 'command',
+    script_id: script ? script.id : null,
+    args: String(req.query.args || ''),
+    command: '',
+    working_dir: '',
+    enabled: 1,
+    timeout_sec: 300,
+    schedule: schedule.defaultFields(),
+  };
+  renderForm(res, 'jobs/new', { job, linkedIds: new Set(ids) });
 });
 
 // Create a job.
@@ -43,16 +67,23 @@ router.post('/', (req, res) => {
   const db = getDb();
   const { values, errors } = validateJob(req.body);
   if (errors.length) {
-    return res
-      .status(400)
-      .render('jobs/new', { job: values, secrets: allSecrets(db), linkedIds: new Set(values.secret_ids), errors });
+    return renderForm(res, 'jobs/new', { job: values, linkedIds: new Set(values.secret_ids), errors, status: 400 });
   }
   const info = db
     .prepare(
-      `INSERT INTO jobs (name, command, working_dir, cron_schedule, enabled, timeout_sec)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO jobs (name, command, working_dir, cron_schedule, enabled, timeout_sec, script_id, args)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(values.name, values.command, values.working_dir, values.cron_schedule, values.enabled, values.timeout_sec);
+    .run(
+      values.name,
+      values.command,
+      values.working_dir,
+      values.cron_schedule,
+      values.enabled,
+      values.timeout_sec,
+      values.script_id,
+      values.args
+    );
   const jobId = Number(info.lastInsertRowid);
 
   linkSecrets(db, jobId, values.secret_ids);
@@ -79,7 +110,8 @@ router.get('/:id/edit', (req, res) => {
   const linked = db.prepare('SELECT secret_id AS id FROM job_secrets WHERE job_id = ?').all(job.id);
   const linkedIds = new Set(linked.map((r) => r.id));
   job.schedule = schedule.parseToFields(job.cron_schedule);
-  res.render('jobs/edit', { job, secrets: allSecrets(db), linkedIds, errors: [] });
+  job.run_type = job.script_id ? 'script' : 'command';
+  renderForm(res, 'jobs/edit', { job, linkedIds });
 });
 
 // Update a job.
@@ -90,11 +122,11 @@ router.post('/:id', (req, res) => {
 
   const { values, errors } = validateJob(req.body);
   if (errors.length) {
-    return res.status(400).render('jobs/edit', {
+    return renderForm(res, 'jobs/edit', {
       job: { ...values, id: existing.id },
-      secrets: allSecrets(db),
       linkedIds: new Set(values.secret_ids),
       errors,
+      status: 400,
     });
   }
 
@@ -103,7 +135,7 @@ router.post('/:id', (req, res) => {
     db.prepare(
       `UPDATE jobs
           SET name = ?, command = ?, working_dir = ?, cron_schedule = ?,
-              enabled = ?, timeout_sec = ?
+              enabled = ?, timeout_sec = ?, script_id = ?, args = ?
         WHERE id = ?`
     ).run(
       values.name,
@@ -112,6 +144,8 @@ router.post('/:id', (req, res) => {
       values.cron_schedule,
       values.enabled,
       values.timeout_sec,
+      values.script_id,
+      values.args,
       existing.id
     );
     db.prepare('DELETE FROM job_secrets WHERE job_id = ?').run(existing.id);

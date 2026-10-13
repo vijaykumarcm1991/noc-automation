@@ -1,0 +1,36 @@
+<%- include('../partials/header', { title: 'Test run · ' + script.filename, refresh: test.status === 'running' ? 3 : 0 }) %>
+
+<div class="mb-6">
+  <a href="/scripts/<%= script.id %>" class="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"><%- icon('back') %> Back to editor</a>
+  <div class="flex flex-wrap items-center gap-3">
+    <h1 class="font-mono text-xl font-semibold tracking-tight"><%= script.filename %></h1>
+    <%- statusBadge(test.status) %>
+  </div>
+  <p class="mt-1 text-sm text-slate-500">Test run #<%= test.id %> · arguments: <code class="font-mono"><%= test.args || '(none)' %></code></p>
+</div>
+
+<dl class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <% [
+    ['Started (' + tz + ')', fmtTime(test.started_at)],
+    ['Finished (' + tz + ')', test.finished_at ? fmtTime(test.finished_at) : '—'],
+    ['Duration', duration(test.started_at, test.finished_at)],
+    ['Exit code', test.exit_code ?? '—'],
+  ].forEach(([label, value]) => { %>
+    <div class="card p-4">
+      <dt class="text-xs font-medium uppercase tracking-wide text-slate-500"><%= label %></dt>
+      <dd class="mt-1.5 font-mono text-sm font-medium text-slate-900"><%= value %></dd>
+    </div>
+  <% }) %>
+</dl>
+
+<section class="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm">
+  <div class="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+    <span class="flex items-center gap-1.5 text-xs font-medium text-slate-400"><%- icon('terminal', 'h-3.5 w-3.5') %> Output</span>
+    <% if (test.output) { %>
+      <button type="button" data-copy="#test-output" class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"><%- icon('copy', 'h-3.5 w-3.5') %> <span data-copy-label>Copy</span></button>
+    <% } %>
+  </div>
+  <pre id="test-output" class="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-slate-200"><%= test.output || (test.status === 'running' ? 'Running…' : 'No output captured.') %></pre>
+</section>
+
+<%- include('../partials/footer') %>

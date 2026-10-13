@@ -8,6 +8,8 @@ const path = require('path');
 const { initDb, markInterruptedRuns, pruneRuns } = require('./src/db');
 const { setMasterKey } = require('./src/vault');
 const { rescheduleAll, cancelAll, unscheduleAll } = require('./src/scheduler');
+const { cancelAllTasks } = require('./src/tasks');
+const { importExisting, scriptsDir } = require('./src/scripts');
 const { createApp } = require('./src/app');
 
 const PORT = process.env.APP_PORT || 3000;
@@ -23,6 +25,9 @@ setMasterKey(process.env.MASTER_KEY);
 initDb(path.resolve(process.cwd(), DB_PATH));
 const interrupted = markInterruptedRuns();
 if (interrupted) console.log(`[startup] marked ${interrupted} unfinished run(s) as interrupted`);
+// Bring .py/.sh files already in the scripts folder into the script library.
+const imported = importExisting();
+if (imported) console.log(`[startup] imported ${imported} script(s) from ${scriptsDir()}`);
 rescheduleAll();
 
 // Optional run-history retention: prune at startup and once a day.
@@ -44,6 +49,7 @@ function shutdown(signal) {
   console.log(`[shutdown] received ${signal}, stopping running jobs`);
   unscheduleAll();
   cancelAll();
+  cancelAllTasks();
   server.close();
   // Give cancelled runs a moment to record their final status.
   setTimeout(() => process.exit(0), 1000).unref();

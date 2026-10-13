@@ -1,0 +1,179 @@
+<%- include('../partials/header', { title: 'Python packages' }) %>
+
+<div class="mb-8">
+  <h1 class="text-2xl font-semibold tracking-tight">Python packages</h1>
+  <p class="mt-1 text-sm text-slate-500">Packages your Python scripts can import, installed into a dedicated virtualenv.</p>
+</div>
+
+<!-- Environment -->
+<section class="card mb-6 p-5">
+  <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex items-start gap-4">
+      <div class="flex h-11 w-11 flex-none items-center justify-center rounded-xl <%= venvExists ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600' %>">
+        <%- icon('package', 'h-5 w-5') %>
+      </div>
+      <div class="min-w-0">
+        <div class="text-sm font-semibold"><%= venvExists ? 'Virtualenv ready' : 'No virtualenv yet' %></div>
+        <div class="mt-0.5 break-all font-mono text-xs text-slate-500"><%= venvDir %></div>
+        <div class="mt-1 text-xs text-slate-500">
+          <% if (venvExists) { %>
+            <%= pythonVersion %> · Python scripts and jobs run with this interpreter.
+          <% } else { %>
+            Scripts currently use the system Python (<%= systemPython %>). Create a virtualenv to manage packages here.
+            <span class="mt-1 block font-medium text-amber-700">Once it exists, every Python script and job runs with it — install the packages your scripts need (see requirements.txt) right after creating it.</span>
+          <% } %>
+        </div>
+      </div>
+    </div>
+    <% if (!venvExists) { %>
+      <button type="button" data-create-venv class="btn-primary flex-none"><%- icon('plus') %> Create virtualenv</button>
+    <% } %>
+  </div>
+</section>
+
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+  <!-- requirements.txt -->
+  <section class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">requirements.txt</h2>
+        <p class="mt-0.5 break-all font-mono text-[11px] text-slate-400"><%= requirementsPath %></p>
+      </div>
+      <span data-req-state class="text-xs text-slate-400"></span>
+    </div>
+    <div class="p-5">
+      <textarea data-requirements rows="12" spellcheck="false" placeholder="requests==2.32.3&#10;python-dotenv&#10;paramiko>=3.4" class="input font-mono text-xs leading-relaxed"><%= requirements %></textarea>
+      <p class="hint">One package per line, using pip syntax (e.g. <code class="font-mono">requests==2.32.3</code>).</p>
+      <div class="mt-4 flex flex-wrap justify-end gap-2">
+        <button type="button" data-save-req class="btn-secondary"><%- icon('save') %> Save</button>
+        <button type="button" data-install class="btn-primary" <%= venvExists ? '' : 'disabled title="Create the virtualenv first"' %>><%- icon('download') %> Save &amp; install</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installed -->
+  <section class="card">
+    <div class="card-header">
+      <h2 class="card-title">Installed packages</h2>
+      <span class="text-xs text-slate-400"><%= installed.length %> installed</span>
+    </div>
+    <% if (!venvExists) { %>
+      <p class="px-5 py-10 text-center text-sm text-slate-500">Create the virtualenv to see installed packages.</p>
+    <% } else if (listError) { %>
+      <p class="px-5 py-6 text-sm text-rose-600"><%= listError %></p>
+    <% } else { %>
+      <div class="max-h-[420px] overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead class="sticky top-0 bg-slate-50">
+            <tr><th class="th">Package</th><th class="th">Version</th><th class="th"><span class="sr-only">Actions</span></th></tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <% installed.forEach(p => { %>
+              <tr>
+                <td class="td py-2 font-mono text-xs text-slate-800"><%= p.name %></td>
+                <td class="td py-2 font-mono text-xs text-slate-500"><%= p.version %></td>
+                <td class="td py-2 text-right">
+                  <% if (!['pip', 'setuptools', 'wheel'].includes(p.name.toLowerCase())) { %>
+                    <button type="button" data-uninstall="<%= p.name %>" class="icon-btn hover:bg-rose-50 hover:text-rose-600" title="Uninstall <%= p.name %>"><%- icon('trash') %></button>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+</div>
+
+<!-- Output -->
+<section data-output-panel class="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm <%= activeTask ? '' : 'hidden' %>">
+  <div class="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+    <div class="flex items-center gap-3">
+      <span class="flex items-center gap-1.5 text-xs font-medium text-slate-400"><%- icon('terminal', 'h-3.5 w-3.5') %> <span data-task-label><%= activeTask ? activeTask.label : 'pip' %></span></span>
+      <span data-task-status class="text-xs text-sky-400"></span>
+    </div>
+    <button type="button" data-cancel class="hidden rounded-md bg-amber-500/90 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-500">Cancel</button>
+  </div>
+  <pre data-output class="h-72 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-slate-200"></pre>
+</section>
+
+<% if (activity.length) { %>
+  <section class="card mt-6">
+    <div class="card-header"><h2 class="card-title">Recent package activity</h2><span class="text-xs text-slate-400"><%= tz %></span></div>
+    <ul class="divide-y divide-slate-100">
+      <% const labels = { 'packages.install': 'Installed from requirements.txt', 'packages.uninstall': 'Uninstalled', 'packages.create_venv': 'Created virtualenv', 'packages.save_requirements': 'Saved requirements.txt' }; %>
+      <% activity.forEach(a => { %>
+        <li class="flex items-center justify-between gap-4 px-5 py-2.5 text-sm">
+          <span><%= labels[a.action] || a.action %><% if (a.action === 'packages.uninstall') { %> <code class="font-mono text-xs"><%= a.target %></code><% } %></span>
+          <span class="text-xs text-slate-400"><%= fmtTime(a.at) %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
+
+<script src="/js/tasks.js"></script>
+<script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var panel = $('[data-output-panel]');
+    var statusEl = $('[data-task-status]');
+    var cancelBtn = $('[data-cancel]');
+    var reqState = $('[data-req-state]');
+    var current = null;
+
+    function watch(taskId, label) {
+      panel.classList.remove('hidden');
+      $('[data-task-label]').textContent = label;
+      statusEl.className = 'text-xs text-sky-400';
+      statusEl.textContent = 'Running…';
+      cancelBtn.classList.remove('hidden');
+      current = NocTasks.stream(taskId, $('[data-output]'), {
+        onEnd: function (d, text) {
+          current = null;
+          cancelBtn.classList.add('hidden');
+          statusEl.className = 'text-xs ' + (d.status === 'success' ? 'text-emerald-400' : 'text-rose-400');
+          statusEl.textContent = text + (d.status === 'success' ? ' — refreshing…' : '');
+          if (d.status === 'success') setTimeout(function () { location.reload(); }, 1200);
+        },
+      });
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function start(url, body, label) {
+      if (current) return alert('Another package operation is running.');
+      NocTasks.postJSON(url, body).then(function (r) {
+        if (r.taskId) return watch(r.taskId, label);
+        alert(r.error || 'Could not start.');
+      });
+    }
+
+    function saveRequirements() {
+      reqState.textContent = 'Saving…';
+      return NocTasks.postJSON('/packages/requirements', { content: $('[data-requirements]').value }).then(function (r) {
+        reqState.textContent = r.ok ? 'Saved' : (r.error || 'Save failed');
+        return r.ok;
+      });
+    }
+
+    var createBtn = $('[data-create-venv]');
+    if (createBtn) createBtn.addEventListener('click', function () { start('/packages/venv', {}, 'Create virtualenv'); });
+    $('[data-save-req]').addEventListener('click', saveRequirements);
+    $('[data-install]').addEventListener('click', function () {
+      saveRequirements().then(function (ok) { if (ok) start('/packages/install', {}, 'pip install -r requirements.txt'); });
+    });
+    document.querySelectorAll('[data-uninstall]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var name = b.getAttribute('data-uninstall');
+        if (confirm('Uninstall ' + name + '? Scripts that import it will fail until it is reinstalled.')) start('/packages/uninstall', { name: name }, 'pip uninstall ' + name);
+      });
+    });
+    $('[data-requirements]').addEventListener('input', function () { reqState.textContent = 'Unsaved changes'; });
+    cancelBtn.addEventListener('click', function () { if (current) current.cancel(); });
+
+    <% if (activeTask) { %>watch(<%- JSON.stringify(activeTask.id) %>, <%- JSON.stringify(activeTask.label) %>);<% } %>
+  })();
+</script>
+
+<%- include('../partials/footer') %>

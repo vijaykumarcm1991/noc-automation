@@ -1,5 +1,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>"><% } %>
 <% if (typeof refresh !== 'undefined' && refresh) { %><meta http-equiv="refresh" content="<%= refresh %>"><% } %>
 <title><%= typeof title !== 'undefined' ? title + ' · NOC Automation' : 'NOC Automation' %></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">

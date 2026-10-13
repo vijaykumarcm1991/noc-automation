@@ -1,0 +1,84 @@
+<%- include('../partials/header', { title: 'History · ' + script.filename, wide: true }) %>
+
+<div class="mb-6">
+  <a href="/scripts/<%= script.id %>" class="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"><%- icon('back') %> Back to editor</a>
+  <h1 class="text-2xl font-semibold tracking-tight">Version history</h1>
+  <p class="mt-1 font-mono text-sm text-slate-500"><%= script.filename %> · <%= versions.length %> version<%= versions.length === 1 ? '' : 's' %></p>
+</div>
+
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+  <nav class="card h-fit overflow-hidden">
+    <ul class="max-h-[70vh] divide-y divide-slate-100 overflow-auto">
+      <% versions.forEach((v, i) => { %>
+        <li>
+          <a href="?v=<%= v.id %>" class="block px-4 py-3 transition <%= selected && selected.id === v.id ? 'bg-indigo-50' : 'hover:bg-slate-50' %>">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm font-semibold <%= selected && selected.id === v.id ? 'text-indigo-700' : 'text-slate-900' %>">Version <%= v.number %></span>
+              <% if (i === 0) { %><span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">current</span><% } %>
+            </div>
+            <div class="mt-0.5 truncate text-xs text-slate-600"><%= v.note || 'Saved' %></div>
+            <div class="text-xs text-slate-400"><%= fmtTime(v.created_at) %> <%= tz %></div>
+          </a>
+        </li>
+      <% }) %>
+    </ul>
+  </nav>
+
+  <section class="min-w-0">
+    <% if (!selected) { %>
+      <div class="card p-10 text-center text-sm text-slate-500">No versions yet.</div>
+    <% } else { %>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold">Version <%= selected.number %> <span class="font-normal text-slate-500">— <%= selected.note || 'Saved' %></span></h2>
+          <p class="text-sm text-slate-500">
+            <% if (diff) { %>
+              <span class="font-medium text-emerald-600">+<%= diff.added %></span> <span class="font-medium text-rose-600">−<%= diff.removed %></span>
+              compared with <%= previous ? 'the previous version' : 'an empty file' %>
+            <% } %>
+          </p>
+        </div>
+        <% if (!isLatest) { %>
+          <form method="post" action="/scripts/<%= script.id %>/versions/<%= selected.id %>/restore" onsubmit="return confirm('Restore version <%= selected.number %>? It becomes a new current version; nothing is lost.');">
+            <%- include('../partials/csrf') %>
+            <button class="btn-primary"><%- icon('rerun') %> Restore this version</button>
+          </form>
+        <% } %>
+      </div>
+
+      <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <% if (!diff) { %>
+          <p class="p-4 text-sm text-slate-500">This file is too large to compare here.</p>
+        <% } else if (!diff.added && !diff.removed) { %>
+          <p class="p-4 text-sm text-slate-500">No changes compared with the previous version.</p>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="w-full border-collapse font-mono text-xs leading-5">
+              <tbody>
+                <% diff.lines.forEach(l => { %>
+                  <% if (l.type === 'skip') { %>
+                    <tr class="bg-slate-50 text-slate-400"><td colspan="4" class="px-4 py-1 text-center text-[11px]">⋯ <%= l.text %> ⋯</td></tr>
+                  <% } else { %>
+                    <tr class="<%= l.type === 'add' ? 'bg-emerald-50' : l.type === 'del' ? 'bg-rose-50' : '' %>">
+                      <td class="w-12 select-none border-r border-slate-100 px-2 text-right text-slate-400"><%= l.oldNo || '' %></td>
+                      <td class="w-12 select-none border-r border-slate-100 px-2 text-right text-slate-400"><%= l.newNo || '' %></td>
+                      <td class="w-5 select-none px-1 text-center <%= l.type === 'add' ? 'text-emerald-600' : l.type === 'del' ? 'text-rose-600' : 'text-slate-300' %>"><%= l.type === 'add' ? '+' : l.type === 'del' ? '−' : '' %></td>
+                      <td class="whitespace-pre px-2 <%= l.type === 'add' ? 'text-emerald-900' : l.type === 'del' ? 'text-rose-900' : 'text-slate-700' %>"><%= l.text %></td>
+                    </tr>
+                  <% } %>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+      <details class="mt-4 overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+        <summary class="cursor-pointer px-4 py-2.5 text-xs font-medium text-slate-400 hover:text-white">Show full content of version <%= selected.number %></summary>
+        <pre class="max-h-[60vh] overflow-auto border-t border-white/10 p-4 font-mono text-xs leading-relaxed text-slate-200"><%= selected.content %></pre>
+      </details>
+    <% } %>
+  </section>
+</div>
+
+<%- include('../partials/footer') %>

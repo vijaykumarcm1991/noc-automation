@@ -30,7 +30,11 @@ function createApp() {
   // Navigation context and formatting helpers for templates.
   app.use((req, res, next) => {
     const section = req.path.split('/')[1];
-    res.locals.active = ['jobs', 'secrets', 'runs'].includes(section) ? section : section === '' ? 'dashboard' : '';
+    res.locals.active = ['jobs', 'secrets', 'runs', 'scripts', 'packages'].includes(section)
+      ? section
+      : section === ''
+        ? 'dashboard'
+        : '';
     res.locals.fmtTime = time.formatTime;
     res.locals.fmtClock = time.formatClock;
     res.locals.fromNow = time.relativeTime;
@@ -56,6 +60,9 @@ function createApp() {
   app.use('/jobs', require('./routes/jobs'));
   app.use('/secrets', require('./routes/secrets'));
   app.use('/runs', require('./routes/runs'));
+  app.use('/scripts', require('./routes/scripts'));
+  app.use('/packages', require('./routes/packages'));
+  app.use('/tasks', require('./routes/tasks'));
 
   app.get('/', (req, res) => {
     const db = getDb();

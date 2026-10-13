@@ -10,7 +10,14 @@ are injected into jobs as environment variables at run time.
   password in `.env`). Sessions use an HTTP-only signed cookie and are stored in
   SQLite, so they survive restarts. Failed logins are rate limited and every form is
   CSRF-protected.
-- **Jobs** — define a shell command, an optional cron schedule, a working directory,
+- **Scripts** — write Python and Bash scripts in a browser code editor (syntax
+  highlighting, Ctrl+S, syntax check on save), test them with arguments and vault
+  secrets while watching live output, browse/diff/restore every saved version, and
+  schedule them as jobs in one click. Files live in `scripts/` so they stay editable
+  outside the tool too.
+- **Python packages** — a managed virtualenv for scripts: edit `requirements.txt`,
+  install/uninstall with live pip output.
+- **Jobs** — run a library script (with arguments) or a shell command, with an optional schedule, a working directory,
   and a timeout. Trigger manually ("Run now") or let it run on its cron schedule.
   A job never runs twice at once, running jobs can be cancelled, and the jobs list
   shows each job's last result and next scheduled time.
@@ -64,6 +71,9 @@ All settings live in `.env` (see `.env.example`):
 | `APP_PORT` / `APP_HOST` | `3000` / all interfaces | Where the server listens (`APP_HOST=127.0.0.1` for local only) |
 | `DB_PATH` | `./data/automation.db` | SQLite database file |
 | `APP_TZ` | `Asia/Kolkata` (IST) | Time zone for cron schedules, every time shown in the UI, and the `TZ` given to jobs |
+| `SCRIPTS_DIR` | `./scripts` | Folder holding the script library (relative to the project) |
+| `VENV_DIR` | `./data/venv` | Managed Python virtualenv used by scripts once created |
+| `PYTHON_BIN` | `python3` | Python used before a virtualenv exists, and to create it |
 | `RUN_RETENTION_DAYS` | `0` (keep forever) | Delete run history older than this many days |
 | `COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS |
 | `TRUST_PROXY` | unset | Express `trust proxy` setting when behind a reverse proxy (e.g. `1`), so login rate limiting sees real client IPs |
@@ -96,6 +106,25 @@ import os
 api_key = os.environ["API_KEY"]
 ```
 
+## Scripts and packages
+
+- **Scripts** (`/scripts`): create a script from a Python or Bash template, edit it in
+  the browser, and press **Run test** to run the editor's current contents (saved or
+  not) with optional arguments and vault secrets; output streams live. Saving runs a
+  syntax check (`python compile` / `bash -n`) and refuses broken code, marking the
+  line. Every save is a version you can diff against the previous one or restore.
+  Files already in `scripts/` are imported at startup, and edits made to the files
+  outside the tool are picked up as new versions.
+- **Schedule this script** opens the job form prefilled with the script, arguments and
+  secrets. Script jobs always run the current saved file.
+- **Python packages** (`/packages`): create the virtualenv, then edit
+  `scripts/requirements.txt` and **Save & install**. Once the virtualenv exists, all
+  Python scripts and jobs run with it, so install your scripts' dependencies there
+  (the repo's `requirements.txt` lists what `jsm_daily.py` needs).
+- The editor bundle is built from `editor/index.js` into `public/vendor/editor.js`
+  (committed, so no build step is needed to run the app). Rebuild with
+  `npm run build:editor` after changing it.
+
 ## Security notes
 
 - Secrets encrypted with AES-256-GCM; a fresh random IV is used per encryption and
@@ -109,6 +138,10 @@ api_key = os.environ["API_KEY"]
   over HTTPS. All state-changing forms carry a per-session CSRF token.
 - Jobs run in their own process group; timeouts, cancellations and server shutdown
   kill the whole group, so child processes don't linger.
+- **Anyone who can sign in can write and run arbitrary code on this server** through
+  the script editor and job commands. Keep the tool on localhost, a VPN or an internal
+  network, and use a strong admin password. Script saves, deletes and package changes
+  are recorded in an audit log shown on the Scripts and Packages pages.
 - **This is still a local single-user tool.** Auth gates the UI, but it isn't a full
   multi-user identity system. Prefer keeping it on localhost or behind a VPN/reverse
   proxy rather than exposing it directly to the internet.
@@ -135,6 +168,9 @@ logout, and login lockout.
 │   ├── app.js             # express app factory (routes, auth, CSRF, error handling)
 │   ├── auth.js            # SQLite session store, login verify, CSRF, rate limiting
 │   ├── validate.js        # job/secret form validation
+│   ├── scripts.js         # script library: files, versions, syntax check, import
+│   ├── tasks.js           # live-streamed processes (script tests, pip) over SSE
+│   ├── diff.js            # line diff for version history
 │   ├── schedule.js        # friendly schedule builder <-> cron, descriptions, next runs
 │   ├── time.js            # IST (APP_TZ) formatting helpers
 │   ├── ui.js              # icon + status badge helpers for views
@@ -142,7 +178,8 @@ logout, and login lockout.
 │   ├── vault.js           # AES-256-GCM encrypt/decrypt
 │   ├── scheduler.js       # node-cron registration, manual triggers, overlap guard, cancel
 │   ├── runner.js          # spawn scripts in a process group, capture output, timeout/cancel
-│   └── routes/            # auth (login/logout), jobs, secrets, runs
+│   └── routes/            # auth, jobs, secrets, runs, scripts, packages, tasks
+├── editor/                # CodeMirror source → public/vendor/editor.js (npm run build:editor)
 ├── views/                 # server-rendered EJS pages (+ auth/login)
 ├── scripts/               # sample scripts to automate
 └── test/                  # node:test suite

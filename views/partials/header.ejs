@@ -7,9 +7,11 @@
 <%
   const navItems = [
     { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'dashboard' },
+    { key: 'scripts', href: '/scripts', label: 'Scripts', icon: 'code' },
     { key: 'jobs', href: '/jobs', label: 'Jobs', icon: 'zap' },
     { key: 'runs', href: '/runs', label: 'Run History', icon: 'history' },
     { key: 'secrets', href: '/secrets', label: 'Secrets Vault', icon: 'key' },
+    { key: 'packages', href: '/packages', label: 'Python Packages', icon: 'package' },
   ];
 %>
   <!-- Mobile top bar -->
@@ -73,4 +75,4 @@
   </aside>
 
   <div class="lg:pl-64">
-    <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10">
+    <main class="mx-auto <%= typeof wide !== 'undefined' && wide ? 'max-w-[1600px]' : 'max-w-6xl' %> px-4 py-8 sm:px-6 lg:px-10">

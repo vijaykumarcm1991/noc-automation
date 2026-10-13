@@ -5,6 +5,7 @@ const { getDb } = require('./db');
 const { decrypt } = require('./vault');
 const { runCommand } = require('./runner');
 const { APP_TZ } = require('./time');
+const scripts = require('./scripts');
 
 const scheduledTasks = new Map();
 // jobId -> { runId, controller } for runs currently executing in this process.
@@ -29,7 +30,20 @@ function resolveJobEnv(jobId) {
         WHERE js.job_id = ?`
     )
     .all(jobId);
+  return decryptRows(secretRows);
+}
 
+// Decrypt the given secret ids into env vars (used by script test runs).
+function decryptSecrets(secretIds) {
+  const ids = (secretIds || []).map(Number).filter(Number.isInteger);
+  if (!ids.length) return { env: {}, errors: [] };
+  const rows = getDb()
+    .prepare(`SELECT name, encrypted_value AS enc FROM secrets WHERE id IN (${ids.map(() => '?').join(',')})`)
+    .all(...ids);
+  return decryptRows(rows);
+}
+
+function decryptRows(secretRows) {
   const env = {};
   const errors = [];
   for (const row of secretRows) {
@@ -77,8 +91,18 @@ function runJobNow(jobId) {
     }, 2000);
     try {
       const { env, errors } = resolveJobEnv(job.id);
-      result = await runCommand(job.command, {
-        cwd: job.working_dir || undefined,
+      // Script jobs build their command from the script at run time, so they
+      // always use the current file and interpreter (e.g. the managed venv).
+      let command = job.command;
+      let cwd = job.working_dir || undefined;
+      if (job.script_id) {
+        const script = scripts.getScript(job.script_id);
+        if (!script) throw new Error(`script #${job.script_id} no longer exists`);
+        command = scripts.buildCommand(script, job.args);
+        cwd = job.working_dir || scripts.scriptsDir();
+      }
+      result = await runCommand(command, {
+        cwd,
         env,
         timeoutSec: job.timeout_sec,
         signal: controller.signal,
@@ -183,6 +207,7 @@ function rescheduleAll() {
 
 module.exports = {
   runJobNow,
+  decryptSecrets,
   cancelRun,
   cancelAll,
   isJobRunning,
