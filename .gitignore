@@ -10,3 +10,6 @@ scripts/.*.tmp-*
 # Python build artifacts
 __pycache__/
 *.pyc
+
+# Local start/stop helper
+app.sh
