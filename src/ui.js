@@ -43,6 +43,12 @@ const ICONS = {
   download:
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
   tick: '<path d="M20 6 9 17l-5-5"/>',
+  container:
+    '<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>',
+  pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  layers:
+    '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 
 function escapeHtml(value) {
@@ -67,4 +73,23 @@ function statusBadge(status) {
   return `<span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${pill}"><span class="h-1.5 w-1.5 rounded-full ${dot}"></span>${escapeHtml(String(status).replace('_', ' '))}</span>`;
 }
 
-module.exports = { icon, statusBadge, escapeHtml };
+// Docker container state (+ health when reported).
+const CONTAINER_STYLES = {
+  running: ['bg-emerald-50 text-emerald-700 ring-emerald-600/20', 'bg-emerald-500'],
+  unhealthy: ['bg-rose-50 text-rose-700 ring-rose-600/20', 'bg-rose-500 animate-pulse'],
+  starting: ['bg-sky-50 text-sky-700 ring-sky-600/20', 'bg-sky-500 animate-pulse'],
+  restarting: ['bg-amber-50 text-amber-700 ring-amber-600/20', 'bg-amber-500 animate-pulse'],
+  paused: ['bg-violet-50 text-violet-700 ring-violet-600/20', 'bg-violet-500'],
+  exited: ['bg-slate-100 text-slate-600 ring-slate-500/20', 'bg-slate-400'],
+  created: ['bg-slate-100 text-slate-600 ring-slate-500/20', 'bg-slate-300'],
+  dead: ['bg-rose-50 text-rose-700 ring-rose-600/20', 'bg-rose-500'],
+};
+
+function containerBadge(state, health) {
+  const key = state === 'running' && (health === 'unhealthy' || health === 'starting') ? health : state;
+  const [pill, dot] = CONTAINER_STYLES[key] || CONTAINER_STYLES.exited;
+  const label = state === 'running' && health ? `${state} · ${health}` : state === 'exited' ? 'stopped' : state;
+  return `<span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${pill}"><span class="h-1.5 w-1.5 rounded-full ${dot}"></span>${escapeHtml(label)}</span>`;
+}
+
+module.exports = { icon, statusBadge, containerBadge, escapeHtml };

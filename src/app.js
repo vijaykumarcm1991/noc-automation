@@ -6,7 +6,8 @@ const { getDb } = require('./db');
 const { initAuth, requireAuth, csrfProtection } = require('./auth');
 const { getNextRun, isJobRunning } = require('./scheduler');
 const time = require('./time');
-const { icon, statusBadge } = require('./ui');
+const { icon, statusBadge, containerBadge } = require('./ui');
+const docker = require('./docker');
 const { describe: describeSchedule } = require('./schedule');
 
 const ROOT = path.join(__dirname, '..');
@@ -30,7 +31,7 @@ function createApp() {
   // Navigation context and formatting helpers for templates.
   app.use((req, res, next) => {
     const section = req.path.split('/')[1];
-    res.locals.active = ['jobs', 'secrets', 'runs', 'scripts', 'packages'].includes(section)
+    res.locals.active = ['jobs', 'secrets', 'runs', 'scripts', 'packages', 'docker'].includes(section)
       ? section
       : section === ''
         ? 'dashboard'
@@ -43,6 +44,8 @@ function createApp() {
     res.locals.appTz = time.APP_TZ;
     res.locals.icon = icon;
     res.locals.statusBadge = statusBadge;
+    res.locals.containerBadge = containerBadge;
+    res.locals.formatBytes = docker.formatBytes;
     res.locals.describeSchedule = describeSchedule;
     res.locals.adminUser = process.env.ADMIN_USERNAME || 'admin';
     res.locals.authed = !!(req.session && req.session.authenticated);
@@ -63,11 +66,15 @@ function createApp() {
   app.use('/scripts', require('./routes/scripts'));
   app.use('/packages', require('./routes/packages'));
   app.use('/tasks', require('./routes/tasks'));
+  app.use('/docker', require('./routes/docker'));
 
-  app.get('/', (req, res) => {
+  app.get('/', async (req, res) => {
     const db = getDb();
+    // Docker tile is best-effort: hidden if Docker is unavailable or slow.
+    const dockerSummary = await docker.summary(1000).catch(() => null);
     const count = (sql) => db.prepare(sql).get().n;
     res.render('dashboard', {
+      dockerSummary,
       jobCount: count('SELECT COUNT(*) AS n FROM jobs'),
       secretCount: count('SELECT COUNT(*) AS n FROM secrets'),
       runCount: count('SELECT COUNT(*) AS n FROM runs'),

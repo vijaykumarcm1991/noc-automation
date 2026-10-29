@@ -17,6 +17,10 @@ are injected into jobs as environment variables at run time.
   outside the tool too.
 - **Python packages** — a managed virtualenv for scripts: edit `requirements.txt`,
   install/uninstall with live pip output.
+- **Docker** — containers grouped by Compose project with live CPU/memory; start,
+  stop, restart, pause/resume and remove (stopped only); whole-project start/stop/
+  restart; live logs with filter, time range, IST timestamps and download; one-off
+  commands inside a container; a read-only image list with dangling-image prune.
 - **Jobs** — run a library script (with arguments) or a shell command, with an optional schedule, a working directory,
   and a timeout. Trigger manually ("Run now") or let it run on its cron schedule.
   A job never runs twice at once, running jobs can be cancelled, and the jobs list
@@ -74,6 +78,8 @@ All settings live in `.env` (see `.env.example`):
 | `SCRIPTS_DIR` | `./scripts` | Folder holding the script library (relative to the project) |
 | `VENV_DIR` | `./data/venv` | Managed Python virtualenv used by scripts once created |
 | `PYTHON_BIN` | `python3` | Python used before a virtualenv exists, and to create it |
+| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker Engine API socket used by the Docker pages |
+| `DOCKER_BIN` | `docker` | Docker CLI used for running commands inside containers |
 | `RUN_RETENTION_DAYS` | `0` (keep forever) | Delete run history older than this many days |
 | `COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS |
 | `TRUST_PROXY` | unset | Express `trust proxy` setting when behind a reverse proxy (e.g. `1`), so login rate limiting sees real client IPs |
@@ -125,6 +131,25 @@ api_key = os.environ["API_KEY"]
   (committed, so no build step is needed to run the app). Rebuild with
   `npm run build:editor` after changing it.
 
+## Docker
+
+The **Docker** page talks to the Docker Engine API over its unix socket, so the app's
+user must be able to use it (be in the `docker` group). Nothing extra is installed.
+
+- **Containers**: grouped by Compose project (standalone ones last), with state and
+  health, published ports as links, and CPU/memory refreshed every 10 seconds (Docker
+  takes about 2 seconds to sample them). Remove is only offered for stopped
+  containers and keeps their volumes.
+- **Logs**: live follow, last N lines, time range, IST timestamps, stderr in red, a
+  filter that highlights matches, and Download for a `.log` file.
+- **Shell**: runs one command at a time as `sh -c "…"` inside a running container
+  (via `docker exec`) and streams the output. It's not an interactive terminal, and
+  containers without `sh` can't run commands. Cancelling stops waiting; a process
+  already started inside the container may keep running.
+- **Hidden data**: container command lines and environment variable values are never
+  sent to the browser (only variable names), because they often contain tokens.
+- Every action, project action, prune and shell command is recorded in the audit log.
+
 ## Security notes
 
 - Secrets encrypted with AES-256-GCM; a fresh random IV is used per encryption and
@@ -138,6 +163,8 @@ api_key = os.environ["API_KEY"]
   over HTTPS. All state-changing forms carry a per-session CSRF token.
 - Jobs run in their own process group; timeouts, cancellations and server shutdown
   kill the whole group, so child processes don't linger.
+- **Docker access is equivalent to root on this server.** The Docker pages let anyone
+  who can sign in stop, remove and run commands in containers.
 - **Anyone who can sign in can write and run arbitrary code on this server** through
   the script editor and job commands. Keep the tool on localhost, a VPN or an internal
   network, and use a strong admin password. Script saves, deletes and package changes
@@ -171,6 +198,7 @@ logout, and login lockout.
 │   ├── scripts.js         # script library: files, versions, syntax check, import
 │   ├── tasks.js           # live-streamed processes (script tests, pip) over SSE
 │   ├── diff.js            # line diff for version history
+│   ├── docker.js          # Docker Engine API client (unix socket), log demux, stats
 │   ├── schedule.js        # friendly schedule builder <-> cron, descriptions, next runs
 │   ├── time.js            # IST (APP_TZ) formatting helpers
 │   ├── ui.js              # icon + status badge helpers for views
@@ -178,7 +206,7 @@ logout, and login lockout.
 │   ├── vault.js           # AES-256-GCM encrypt/decrypt
 │   ├── scheduler.js       # node-cron registration, manual triggers, overlap guard, cancel
 │   ├── runner.js          # spawn scripts in a process group, capture output, timeout/cancel
-│   └── routes/            # auth, jobs, secrets, runs, scripts, packages, tasks
+│   └── routes/            # auth, jobs, secrets, runs, scripts, packages, tasks, docker
 ├── editor/                # CodeMirror source → public/vendor/editor.js (npm run build:editor)
 ├── views/                 # server-rendered EJS pages (+ auth/login)
 ├── scripts/               # sample scripts to automate

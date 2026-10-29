@@ -12,6 +12,7 @@ const fs = require('fs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'noc-scripts-http-'));
 process.env.SCRIPTS_DIR = path.join(tmp, 'scripts');
 process.env.VENV_DIR = path.join(tmp, 'venv');
+process.env.DOCKER_SOCKET = '/nonexistent/docker.sock'; // keep tests off the real Docker
 process.env.ADMIN_USERNAME = 'admin';
 process.env.ADMIN_PASSWORD = 'scripts-pw';
 

@@ -1,0 +1,61 @@
+<%- include('../partials/header', { title: 'Docker images' }) %>
+
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Docker</h1>
+    <p class="mt-1 text-sm text-slate-500"><%= images.length %> images · <%= formatBytes(totalSize) %> on disk</p>
+  </div>
+  <form method="post" action="/docker/images/prune" onsubmit="return confirm('Remove all dangling (untagged, unused) images?');" class="self-start sm:self-auto">
+    <%- include('../partials/csrf') %>
+    <button class="btn-secondary" <%= danglingCount ? '' : 'disabled title="No dangling images"' %>><%- icon('trash') %> Prune dangling images<% if (danglingCount) { %> (<%= danglingCount %>)<% } %></button>
+  </form>
+</div>
+
+<%- include('_tabs', { current: 'images' }) %>
+<%- include('_notice') %>
+
+<div class="card overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-slate-200 text-sm">
+      <thead class="bg-slate-50/80">
+        <tr>
+          <th class="th">Image</th>
+          <th class="th hidden sm:table-cell">ID</th>
+          <th class="th">Size</th>
+          <th class="th hidden md:table-cell">Created (<%= tz %>)</th>
+          <th class="th">In use</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <% images.forEach(img => { %>
+          <tr class="hover:bg-slate-50/60">
+            <td class="td">
+              <% if (img.dangling) { %>
+                <span class="font-mono text-xs text-slate-400">&lt;none&gt;</span>
+                <span class="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">dangling</span>
+              <% } else { %>
+                <% img.tags.forEach(t => { %><div class="font-mono text-xs text-slate-800"><%= t %></div><% }) %>
+              <% } %>
+            </td>
+            <td class="td hidden font-mono text-xs text-slate-500 sm:table-cell"><%= img.id %></td>
+            <td class="td whitespace-nowrap font-mono text-xs text-slate-700"><%= formatBytes(img.size) %></td>
+            <td class="td hidden whitespace-nowrap md:table-cell">
+              <div class="text-slate-700"><%= fmtTime(img.created) %></div>
+              <div class="text-xs text-slate-400"><%= fromNow(img.created) %></div>
+            </td>
+            <td class="td">
+              <% if (img.containers) { %>
+                <span class="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"><%= img.containers %> container<%= img.containers === 1 ? '' : 's' %></span>
+              <% } else { %>
+                <span class="text-xs text-slate-400">unused</span>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<p class="mt-2 text-xs text-slate-500">Read-only list. Pruning removes only dangling images (no tag and not used by any container).</p>
+
+<%- include('../partials/footer') %>

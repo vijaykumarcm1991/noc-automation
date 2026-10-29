@@ -1,0 +1,5 @@
+<% if (notice) { %>
+  <div class="mb-6 flex gap-3 rounded-xl border p-4 text-sm <%= kind === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800' %>">
+    <%- icon(kind === 'error' ? 'alert' : 'check', 'h-5 w-5 flex-none ' + (kind === 'error' ? 'text-rose-500' : 'text-emerald-500')) %> <span><%= notice %></span>
+  </div>
+<% } %>

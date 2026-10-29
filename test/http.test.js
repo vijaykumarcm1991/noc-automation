@@ -14,6 +14,7 @@ const { setMasterKey } = require('../src/vault');
 const { createApp } = require('../src/app');
 const { unscheduleAll } = require('../src/scheduler');
 
+process.env.DOCKER_SOCKET = '/nonexistent/docker.sock'; // keep tests off the real Docker
 process.env.ADMIN_USERNAME = 'admin';
 process.env.ADMIN_PASSWORD = 'http-test-pw';
 process.env.MASTER_KEY = crypto.randomBytes(32).toString('hex');

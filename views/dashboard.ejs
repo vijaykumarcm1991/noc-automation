@@ -30,6 +30,19 @@
   <% }) %>
 </div>
 
+<% if (dockerSummary) { %>
+  <a href="/docker" class="card mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-4 transition hover:shadow-md">
+    <span class="flex items-center gap-3">
+      <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"><%- icon('container', 'h-5 w-5') %></span>
+      <span class="text-sm font-semibold">Docker</span>
+    </span>
+    <span class="text-sm"><span class="font-semibold text-emerald-700"><%= dockerSummary.running %></span> <span class="text-slate-500">running</span></span>
+    <span class="text-sm"><span class="font-semibold <%= dockerSummary.stopped ? 'text-slate-700' : 'text-slate-400' %>"><%= dockerSummary.stopped %></span> <span class="text-slate-500">stopped</span></span>
+    <span class="text-sm"><span class="font-semibold <%= dockerSummary.unhealthy ? 'text-rose-600' : 'text-slate-400' %>"><%= dockerSummary.unhealthy %></span> <span class="text-slate-500">unhealthy</span></span>
+    <span class="ml-auto text-sm link">Manage containers &rarr;</span>
+  </a>
+<% } %>
+
 <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-5">
   <section class="card lg:col-span-3">
     <div class="card-header">

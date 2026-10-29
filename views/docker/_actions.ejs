@@ -1,0 +1,16 @@
+<%# Action buttons for one container. Expects: c (name, state), compact (bool), returnTo ('list' | 'detail') %>
+<%
+  const btn = compact ? 'icon-btn' : 'btn-secondary py-1.5';
+  const acts = [];
+  if (c.state === 'running') acts.push(['restart', 'Restart', 'rerun', ''], ['pause', 'Pause', 'pause', ''], ['stop', 'Stop', 'stop', 'Stop ' + c.name + '?']);
+  else if (c.state === 'paused') acts.push(['unpause', 'Resume', 'play', ''], ['stop', 'Stop', 'stop', 'Stop ' + c.name + '?']);
+  else if (c.state === 'restarting') acts.push(['stop', 'Stop', 'stop', 'Stop ' + c.name + '?']);
+  else acts.push(['start', 'Start', 'play', ''], ['remove', 'Remove', 'trash', 'Remove container ' + c.name + '? Its volumes are kept, but the container and its logs are deleted.']);
+%>
+<% acts.forEach(([action, label, ic, confirmText]) => { %>
+  <form method="post" action="/docker/containers/<%= encodeURIComponent(c.name) %>/<%= action %>" <% if (confirmText) { %>onsubmit="return confirm(<%= JSON.stringify(confirmText) %>);"<% } %>>
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="return" value="<%= returnTo %>">
+    <button class="<%= btn %> <%= action === 'remove' || action === 'stop' ? 'hover:bg-rose-50 hover:text-rose-600' : '' %>" title="<%= label %>" aria-label="<%= label %> <%= c.name %>"><%- icon(ic) %><% if (!compact) { %> <%= label %><% } %></button>
+  </form>
+<% }) %>

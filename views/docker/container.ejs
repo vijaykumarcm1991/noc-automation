@@ -1,0 +1,413 @@
+<%- include('../partials/header', { title: c.name + ' · Docker', wide: true }) %>
+
+<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div class="min-w-0">
+    <a href="/docker" class="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900"><%- icon('back') %> Docker</a>
+    <div class="flex flex-wrap items-center gap-3">
+      <h1 class="truncate font-mono text-xl font-semibold tracking-tight"><%= c.name %></h1>
+      <%- containerBadge(c.paused ? 'paused' : c.state, c.health) %>
+      <% if (c.project) { %><span class="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"><%= c.project %><%= c.service ? ' / ' + c.service : '' %></span><% } %>
+    </div>
+    <p class="mt-1 font-mono text-xs text-slate-500"><%= c.image %> · <%= c.shortId %></p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <%- include('_actions', { c: { name: c.name, state: c.paused ? 'paused' : c.state }, compact: false, returnTo: 'detail' }) %>
+  </div>
+</div>
+
+<%- include('_notice') %>
+
+<!-- Tabs -->
+<div class="mb-6 flex gap-1 border-b border-slate-200" data-tabs>
+  <% [['overview', 'Overview', 'dashboard'], ['logs', 'Logs', 'terminal'], ['shell', 'Shell', 'code']].forEach(([key, label, ic]) => { %>
+    <button type="button" data-tab="<%= key %>" class="-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium <%= tab === key ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800' %>"><%- icon(ic) %> <%= label %></button>
+  <% }) %>
+</div>
+
+<!-- Overview -->
+<section data-panel="overview" class="<%= tab === 'overview' ? '' : 'hidden' %>">
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="card p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500"><%= c.running ? 'Up since' : 'Stopped' %> (<%= tz %>)</div>
+      <div class="mt-1.5 font-mono text-sm font-medium"><%= c.running ? fmtTime(c.startedAt) : (c.finishedAt ? fmtTime(c.finishedAt) : '—') %></div>
+      <div class="text-xs text-slate-400"><%= c.running ? fromNow(c.startedAt) : (c.finishedAt ? fromNow(c.finishedAt) + ' · exit ' + c.exitCode : '') %></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500">CPU</div>
+      <div class="mt-1.5 font-mono text-sm font-medium" data-ov-cpu><%= c.running ? '…' : '—' %></div>
+      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div data-ov-cpu-bar class="h-full w-0 rounded-full bg-indigo-500 transition-all"></div></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500">Memory</div>
+      <div class="mt-1.5 font-mono text-sm font-medium" data-ov-mem><%= c.running ? '…' : '—' %></div>
+      <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div data-ov-mem-bar class="h-full w-0 rounded-full bg-sky-500 transition-all"></div></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-500">Restarts</div>
+      <div class="mt-1.5 font-mono text-sm font-medium"><%= c.restartCount %></div>
+      <div class="text-xs text-slate-400">policy: <%= c.restartPolicy %></div>
+    </div>
+  </div>
+
+  <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <section class="card">
+      <div class="card-header"><h2 class="card-title">Details</h2></div>
+      <dl class="divide-y divide-slate-100 text-sm">
+        <% [
+          ['Image', c.image],
+          ['Image ID', c.imageId],
+          ['Container ID', c.shortId],
+          ['Created', fmtTime(c.created) + ' ' + tz],
+          ['Health', c.health || 'no healthcheck'],
+          ['OOM killed', c.oomKilled ? 'yes' : 'no'],
+          ['Last error', c.error || '—'],
+          ['TTY', c.tty ? 'yes' : 'no'],
+        ].forEach(([k, v]) => { %>
+          <div class="flex gap-4 px-5 py-2.5"><dt class="w-32 flex-none text-slate-500"><%= k %></dt><dd class="min-w-0 break-all font-mono text-xs leading-5 text-slate-800"><%= v %></dd></div>
+        <% }) %>
+      </dl>
+    </section>
+
+    <div class="space-y-6">
+      <section class="card">
+        <div class="card-header"><h2 class="card-title">Ports &amp; networks</h2></div>
+        <div class="space-y-3 p-5 text-sm">
+          <div class="flex flex-wrap gap-2">
+            <% if (!c.ports.length) { %><span class="text-slate-500">No published ports.</span><% } %>
+            <% c.ports.forEach(p => { %>
+              <a href="http://<%= host %>:<%= p.public %>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-700"><%= p.public %>:<%= p.private %> <%- icon('external', 'h-3 w-3') %></a>
+            <% }) %>
+          </div>
+          <div class="text-xs text-slate-500">Networks: <span class="font-mono text-slate-700"><%= c.networks.join(', ') || '—' %></span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2 class="card-title">Mounts</h2><span class="text-xs text-slate-400"><%= c.mounts.length %></span></div>
+        <% if (!c.mounts.length) { %><p class="px-5 py-4 text-sm text-slate-500">No mounts.</p><% } %>
+        <ul class="divide-y divide-slate-100">
+          <% c.mounts.forEach(m => { %>
+            <li class="px-5 py-2.5 font-mono text-xs">
+              <div class="break-all text-slate-800"><%= m.destination %> <span class="text-slate-400">(<%= m.type %><%= m.rw ? '' : ', read-only' %>)</span></div>
+              <div class="break-all text-slate-500">← <%= m.source %></div>
+            </li>
+          <% }) %>
+        </ul>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><h2 class="card-title">Environment variables</h2><span class="text-xs text-slate-400">names only · values hidden</span></div>
+        <div class="flex flex-wrap gap-1.5 p-5">
+          <% if (!c.envNames.length) { %><span class="text-sm text-slate-500">None.</span><% } %>
+          <% c.envNames.forEach(n => { %><span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700"><%= n %></span><% }) %>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- Logs -->
+<section data-panel="logs" class="<%= tab === 'logs' ? '' : 'hidden' %>">
+  <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+    <select data-log-tail class="input w-auto py-1.5" title="Lines">
+      <% [['100', 'Last 100 lines'], ['500', 'Last 500 lines'], ['1000', 'Last 1,000 lines'], ['5000', 'Last 5,000 lines'], ['all', 'All lines']].forEach(([v, l]) => { %>
+        <option value="<%= v %>" <%= v === '500' ? 'selected' : '' %>><%= l %></option>
+      <% }) %>
+    </select>
+    <select data-log-since class="input w-auto py-1.5" title="Time range">
+      <% [['0', 'Any time'], ['900', 'Last 15 min'], ['3600', 'Last 1 hour'], ['21600', 'Last 6 hours'], ['86400', 'Last 24 hours'], ['604800', 'Last 7 days']].forEach(([v, l]) => { %>
+        <option value="<%= v %>"><%= l %></option>
+      <% }) %>
+    </select>
+    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+      <input type="checkbox" data-log-follow <%= c.running ? 'checked' : '' %> class="h-4 w-4 accent-indigo-600"> Live
+    </label>
+    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+      <input type="checkbox" data-log-ts checked class="h-4 w-4 accent-indigo-600"> Timestamps (<%= tz %>)
+    </label>
+    <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+      <input type="checkbox" data-log-wrap checked class="h-4 w-4 accent-indigo-600"> Wrap
+    </label>
+    <div class="relative min-w-[12rem] flex-1">
+      <input data-log-filter placeholder="Filter lines…" class="input py-1.5 pr-16">
+      <span data-log-matches class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-400"></span>
+    </div>
+  </div>
+
+  <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
+      <span data-log-status class="flex items-center gap-1.5 text-xs text-slate-400">Loading…</span>
+      <div class="flex items-center gap-1">
+        <button type="button" data-log-bottom class="hidden rounded-md px-2 py-1 text-xs text-sky-300 hover:bg-white/10">↓ Jump to latest</button>
+        <button type="button" data-log-clear class="rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white">Clear</button>
+        <a data-log-download href="#" class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"><%- icon('download', 'h-3.5 w-3.5') %> Download</a>
+      </div>
+    </div>
+    <div data-log-view class="h-[65vh] overflow-auto py-2 font-mono text-xs leading-5 text-slate-200"></div>
+  </div>
+  <p class="mt-2 text-xs text-slate-400">stderr lines are shown in red. The viewer keeps the latest 10,000 lines; use Download for more.</p>
+</section>
+
+<!-- Shell -->
+<section data-panel="shell" class="<%= tab === 'shell' ? '' : 'hidden' %>">
+  <div class="card mb-4 p-5">
+    <form data-shell-form class="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div class="flex-1">
+        <label class="label" for="shell-cmd">Command <span class="font-normal text-slate-400">— runs as <code class="font-mono">sh -c "…"</code> inside <%= c.name %></span></label>
+        <div class="relative">
+          <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center font-mono text-sm text-slate-400">$</span>
+          <input id="shell-cmd" data-shell-cmd autocomplete="off" spellcheck="false" placeholder="ls -la /app && df -h" class="input pl-7 font-mono" <%= c.running && !c.paused ? '' : 'disabled' %>>
+        </div>
+      </div>
+      <div class="w-28">
+        <label class="label" for="shell-timeout">Timeout</label>
+        <div class="relative">
+          <input id="shell-timeout" data-shell-timeout type="number" min="1" max="600" value="60" class="input pr-10">
+          <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-400">sec</span>
+        </div>
+      </div>
+      <button type="submit" data-shell-run class="btn-primary" <%= c.running && !c.paused ? '' : 'disabled' %>><%- icon('play') %> Run</button>
+    </form>
+    <% if (!c.running || c.paused) { %>
+      <p class="mt-3 text-sm text-amber-700">The container must be running to run commands in it.</p>
+    <% } %>
+    <div data-shell-recent class="mt-3 flex flex-wrap gap-1.5"></div>
+    <p class="mt-3 text-xs text-slate-500">One-off commands, not an interactive terminal. Each command is recorded in the audit log. Cancelling stops waiting for output; a process already started inside the container may keep running.</p>
+  </div>
+
+  <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-sm">
+    <div class="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+      <span data-shell-status class="text-xs text-slate-400">Output appears here.</span>
+      <button type="button" data-shell-cancel class="hidden rounded-md bg-amber-500/90 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-500">Cancel</button>
+    </div>
+    <pre data-shell-output class="h-80 overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-slate-200"></pre>
+  </div>
+</section>
+
+<script src="/js/tasks.js"></script>
+<script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var name = <%- JSON.stringify(c.name) %>;
+    var base = '/docker/containers/' + encodeURIComponent(name);
+    var running = <%= c.running && !c.paused ? 'true' : 'false' %>;
+
+    // ---------- Tabs ----------
+    var logsStarted = false;
+    function showTab(key) {
+      document.querySelectorAll('[data-tab]').forEach(function (b) {
+        var on = b.getAttribute('data-tab') === key;
+        b.className = '-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium ' + (on ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800');
+      });
+      document.querySelectorAll('[data-panel]').forEach(function (p) { p.classList.toggle('hidden', p.getAttribute('data-panel') !== key); });
+      history.replaceState(null, '', location.pathname + '?tab=' + key);
+      if (key === 'logs' && !logsStarted) { logsStarted = true; startLogs(); }
+      if (key === 'shell') $('[data-shell-cmd]').focus();
+    }
+    document.querySelectorAll('[data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
+    });
+
+    // ---------- Overview stats ----------
+    function fmtBytes(n) {
+      if (!n) return '0 B';
+      var u = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.min(4, Math.floor(Math.log(n) / Math.log(1024)));
+      return (n / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i];
+    }
+    function loadStats() {
+      if (!running) return;
+      fetch(base + '/stats.json', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (s) {
+        if (s.error) return;
+        $('[data-ov-cpu]').textContent = s.cpu.toFixed(1) + '%';
+        $('[data-ov-cpu-bar]').style.width = Math.min(100, s.cpu) + '%';
+        $('[data-ov-mem]').textContent = fmtBytes(s.memUsed) + ' / ' + fmtBytes(s.memLimit);
+        $('[data-ov-mem-bar]').style.width = Math.min(100, s.memPercent) + '%';
+      }).catch(function () {});
+    }
+    loadStats();
+    setInterval(loadStats, 10000);
+
+    // ---------- Logs ----------
+    var view = $('[data-log-view]');
+    var statusEl = $('[data-log-status]');
+    var filterInput = $('[data-log-filter]');
+    var MAX_LINES = 10000;
+    var es = null;
+    var stick = true;
+
+    function escapeHtml(s) { return s.replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    function renderLine(el) {
+      var q = filterInput.value;
+      var text = el._text;
+      var match = !q || text.toLowerCase().indexOf(q.toLowerCase()) !== -1 || (el._ts || '').indexOf(q) !== -1;
+      el.style.display = match ? '' : 'none';
+      var body = escapeHtml(text);
+      if (q && match) {
+        var re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        body = body.replace(re, function (m) { return '<mark class="rounded bg-amber-300/80 px-0.5 text-slate-950">' + m + '</mark>'; });
+      }
+      el.innerHTML = (el._ts ? '<span class="mr-3 select-none text-slate-500">' + escapeHtml(el._ts) + '</span>' : '') + body;
+      return match;
+    }
+
+    function updateMatches() {
+      var q = filterInput.value;
+      if (!q) { $('[data-log-matches]').textContent = ''; return; }
+      var n = 0;
+      view.querySelectorAll('[data-line]').forEach(function (el) { if (el.style.display !== 'none') n++; });
+      $('[data-log-matches]').textContent = n + ' match' + (n === 1 ? '' : 'es');
+    }
+
+    function addLines(lines) {
+      var frag = document.createDocumentFragment();
+      lines.forEach(function (l) {
+        var el = document.createElement('div');
+        el.setAttribute('data-line', '');
+        el.className = 'px-4 hover:bg-white/5 ' + (l.s === 'err' ? 'text-rose-300' : '');
+        el._text = l.t;
+        el._ts = l.ts;
+        renderLine(el);
+        frag.appendChild(el);
+      });
+      view.appendChild(frag);
+      var extra = view.childElementCount - MAX_LINES;
+      while (extra-- > 0) view.removeChild(view.firstChild);
+      if (filterInput.value) updateMatches();
+      if (stick) view.scrollTop = view.scrollHeight;
+    }
+
+    function setWrap() {
+      view.classList.toggle('whitespace-pre-wrap', $('[data-log-wrap]').checked);
+      view.classList.toggle('break-words', $('[data-log-wrap]').checked);
+      view.classList.toggle('whitespace-pre', !$('[data-log-wrap]').checked);
+    }
+
+    function params(extra) {
+      var p = new URLSearchParams({
+        tail: $('[data-log-tail]').value,
+        since: $('[data-log-since]').value,
+        timestamps: $('[data-log-ts]').checked ? '1' : '0',
+      });
+      Object.keys(extra || {}).forEach(function (k) { p.set(k, extra[k]); });
+      return p.toString();
+    }
+
+    function setStatus(kind, text) {
+      var dot = { live: 'bg-emerald-400 animate-pulse', idle: 'bg-slate-500', error: 'bg-rose-400', loading: 'bg-sky-400 animate-pulse' }[kind];
+      statusEl.innerHTML = '<span class="h-1.5 w-1.5 rounded-full ' + dot + '"></span>';
+      statusEl.appendChild(document.createTextNode(text));
+    }
+
+    function startLogs() {
+      if (es) es.close();
+      view.innerHTML = '';
+      stick = true;
+      var follow = $('[data-log-follow]').checked;
+      setStatus('loading', 'Loading…');
+      $('[data-log-download]').href = base + '/logs.txt?' + params();
+      es = new EventSource(base + '/logs/stream?' + params({ follow: follow ? '1' : '0' }));
+      var first = true;
+      es.addEventListener('lines', function (e) {
+        addLines(JSON.parse(e.data));
+        if (first) { first = false; setStatus(follow ? 'live' : 'idle', follow ? 'Live — following new output' : view.childElementCount + ' lines'); }
+      });
+      es.addEventListener('end', function (e) {
+        es.close();
+        es = null;
+        var d = JSON.parse(e.data);
+        setStatus('idle', view.childElementCount + ' lines' + (follow && d.reason !== 'done' ? ' · stream ended (' + d.reason + ')' : ''));
+      });
+      es.onerror = function () {
+        if (!es || es.readyState === EventSource.CLOSED) return;
+        es.close();
+        es = null;
+        setStatus('error', 'Disconnected — change a setting or reload to reconnect');
+      };
+      if (!follow) setTimeout(function () { if (first) setStatus('idle', 'No log lines in this range'); }, 1500);
+    }
+
+    view.addEventListener('scroll', function () {
+      stick = view.scrollTop + view.clientHeight >= view.scrollHeight - 30;
+      $('[data-log-bottom]').classList.toggle('hidden', stick);
+    });
+    $('[data-log-bottom]').addEventListener('click', function () { view.scrollTop = view.scrollHeight; });
+    $('[data-log-clear]').addEventListener('click', function () { view.innerHTML = ''; updateMatches(); });
+    ['[data-log-tail]', '[data-log-since]', '[data-log-follow]', '[data-log-ts]'].forEach(function (s) { $(s).addEventListener('change', startLogs); });
+    $('[data-log-wrap]').addEventListener('change', setWrap);
+    var filterTimer;
+    filterInput.addEventListener('input', function () {
+      clearTimeout(filterTimer);
+      filterTimer = setTimeout(function () {
+        view.querySelectorAll('[data-line]').forEach(renderLine);
+        updateMatches();
+      }, 150);
+    });
+    setWrap();
+    window.addEventListener('beforeunload', function () { if (es) es.close(); });
+
+    // ---------- Shell ----------
+    var shellOut = $('[data-shell-output]');
+    var shellStatus = $('[data-shell-status]');
+    var cancelBtn = $('[data-shell-cancel]');
+    var runBtn = $('[data-shell-run]');
+    var current = null;
+    var recentKey = 'noc-docker-recent:' + name;
+
+    function recent() { try { return JSON.parse(localStorage.getItem(recentKey) || '[]'); } catch (e) { return []; } }
+    function remember(cmd) {
+      var list = recent().filter(function (c) { return c !== cmd; });
+      list.unshift(cmd);
+      try { localStorage.setItem(recentKey, JSON.stringify(list.slice(0, 8))); } catch (e) {}
+      drawRecent();
+    }
+    function drawRecent() {
+      var box = $('[data-shell-recent]');
+      box.innerHTML = '';
+      recent().forEach(function (cmd) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'max-w-xs truncate rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-mono text-xs text-slate-600 hover:border-indigo-300 hover:text-indigo-700';
+        b.textContent = cmd;
+        b.title = cmd;
+        b.addEventListener('click', function () { $('[data-shell-cmd]').value = cmd; $('[data-shell-cmd]').focus(); });
+        box.appendChild(b);
+      });
+    }
+    drawRecent();
+
+    $('[data-shell-form]').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var cmd = $('[data-shell-cmd]').value.trim();
+      if (!cmd || current || !running) return;
+      runBtn.disabled = true;
+      shellStatus.className = 'text-xs text-sky-400';
+      shellStatus.textContent = 'Running: ' + cmd;
+      NocTasks.postJSON(base + '/exec', { command: cmd, timeout_sec: $('[data-shell-timeout]').value }).then(function (r) {
+        if (!r.taskId) {
+          runBtn.disabled = false;
+          shellStatus.className = 'text-xs text-rose-400';
+          shellStatus.textContent = r.error || 'Could not run the command.';
+          return;
+        }
+        remember(cmd);
+        cancelBtn.classList.remove('hidden');
+        var started = Date.now();
+        current = NocTasks.stream(r.taskId, shellOut, {
+          onEnd: function (d, text) {
+            current = null;
+            runBtn.disabled = false;
+            cancelBtn.classList.add('hidden');
+            shellStatus.className = 'text-xs ' + (d.status === 'success' ? 'text-emerald-400' : 'text-rose-400');
+            shellStatus.textContent = text + (d.exitCode !== null && d.exitCode !== undefined ? ' (exit ' + d.exitCode + ')' : '') + ' · ' + ((Date.now() - started) / 1000).toFixed(1) + 's';
+          },
+        });
+      });
+    });
+    cancelBtn.addEventListener('click', function () { if (current) current.cancel(); });
+
+    if (<%- JSON.stringify(tab) %> === 'logs') { logsStarted = true; startLogs(); }
+  })();
+</script>
+
+<%- include('../partials/footer') %>
