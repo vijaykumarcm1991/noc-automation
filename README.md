@@ -84,6 +84,28 @@ All settings live in `.env` (see `.env.example`):
 | `COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS |
 | `TRUST_PROXY` | unset | Express `trust proxy` setting when behind a reverse proxy (e.g. `1`), so login rate limiting sees real client IPs |
 
+## Running in the background
+
+`app.sh` starts and stops the app as a background process that keeps running after
+you close the terminal:
+
+```bash
+./app.sh start     # start (installs dependencies first if node_modules is missing)
+./app.sh stop      # graceful stop: running jobs are cancelled and recorded
+./app.sh restart   # stop, then start
+./app.sh status    # running? PID, URL and start time
+./app.sh logs      # follow the log (Ctrl+C to quit)
+```
+
+- The log is written to `data/logs/app.log` and the process ID to `data/app.pid`.
+- `start` checks that `.env` exists, waits until the app answers, and shows the last
+  log lines if it fails to start.
+- `stop` asks the app to shut down cleanly and force-kills it only if it hasn't
+  exited after 15 seconds.
+- Scheduled jobs only run while the app is running. `app.sh` doesn't start the app
+  after a server reboot; use a systemd service for that.
+- `npm start` still runs the app in the foreground.
+
 ## Usage
 
 1. **Sign in** with the admin credentials from `.env`. Without an authenticated
