@@ -1,0 +1,34 @@
+# systemd unit for NOC Automation.
+# Placeholders in @...@ are filled in by deploy/install-service.sh; to install by
+# hand, replace them yourself (see docs/SYSTEMD.md).
+
+[Unit]
+Description=NOC Automation (job scheduler, scripts and Docker UI)
+Documentation=file://@APP_DIR@/docs/SYSTEMD.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@GROUP@
+WorkingDirectory=@APP_DIR@
+ExecStart=@NODE@ server.js
+# server.js reads .env from the working directory.
+Environment=NODE_ENV=production
+# Jobs and scripts inherit this PATH (user-installed tools in ~/.local/bin included).
+Environment=PATH=@HOME@/.local/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+
+# Send SIGTERM to the app only: it cancels running jobs itself and records their
+# status. Anything still alive after TimeoutStopSec is force-killed.
+KillMode=mixed
+TimeoutStopSec=20
+
+Restart=on-failure
+RestartSec=5
+
+# Output goes to the journal: journalctl -u noc-automation -f
+SyslogIdentifier=noc-automation
+
+[Install]
+WantedBy=multi-user.target

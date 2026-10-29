@@ -102,9 +102,22 @@ you close the terminal:
   log lines if it fails to start.
 - `stop` asks the app to shut down cleanly and force-kills it only if it hasn't
   exited after 15 seconds.
-- Scheduled jobs only run while the app is running. `app.sh` doesn't start the app
-  after a server reboot; use a systemd service for that.
+- Scheduled jobs only run while the app is running. `app.sh` on its own doesn't start
+  the app after a server reboot; install the systemd service for that (below).
 - `npm start` still runs the app in the foreground.
+
+### As a systemd service (recommended on a server)
+
+```bash
+./deploy/install-service.sh install     # install, enable at boot, start
+./deploy/install-service.sh uninstall   # stop, disable, remove
+```
+
+The service starts at boot, restarts after a crash, and logs to the journal
+(`journalctl -u noc-automation -f`). Once it's installed, `./app.sh start|stop|restart|
+status|logs` hands off to `systemctl`/`journalctl`, so only one copy ever runs.
+Step-by-step and manual instructions, day-to-day commands and troubleshooting are in
+[docs/SYSTEMD.md](docs/SYSTEMD.md).
 
 ## Usage
 
@@ -229,6 +242,9 @@ logout, and login lockout.
 │   ├── scheduler.js       # node-cron registration, manual triggers, overlap guard, cancel
 │   ├── runner.js          # spawn scripts in a process group, capture output, timeout/cancel
 │   └── routes/            # auth, jobs, secrets, runs, scripts, packages, tasks, docker
+├── app.sh                 # start/stop/restart/status/logs helper
+├── deploy/                # systemd unit template + install-service.sh
+├── docs/SYSTEMD.md        # running as a systemd service
 ├── editor/                # CodeMirror source → public/vendor/editor.js (npm run build:editor)
 ├── views/                 # server-rendered EJS pages (+ auth/login)
 ├── scripts/               # sample scripts to automate

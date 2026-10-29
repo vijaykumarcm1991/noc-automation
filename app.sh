@@ -8,6 +8,9 @@
 #   ./app.sh logs      follow the log (Ctrl+C to quit)
 #
 # PID file: data/app.pid   Log file: data/logs/app.log
+#
+# If the systemd service is installed (deploy/install-service.sh), these commands
+# hand off to systemctl/journalctl instead, so only one copy ever runs.
 
 set -euo pipefail
 
@@ -16,6 +19,7 @@ PID_FILE="$APP_DIR/data/app.pid"
 LOG_DIR="$APP_DIR/data/logs"
 LOG_FILE="$LOG_DIR/app.log"
 STOP_TIMEOUT=15 # seconds to wait for a graceful stop before force-killing
+SERVICE=noc-automation
 
 cd "$APP_DIR"
 
@@ -118,6 +122,30 @@ status() {
     return 3
   fi
 }
+
+service_installed() {
+  [[ -f "/etc/systemd/system/$SERVICE.service" ]]
+}
+
+# With the systemd service installed, act as a front-end to it.
+if service_installed; then
+  case "${1:-}" in
+    start | stop | restart)
+      echo "(managed by systemd: sudo systemctl $1 $SERVICE)"
+      sudo systemctl "$1" "$SERVICE"
+      [[ "$1" == "stop" ]] && echo "Stopped." || systemctl is-active "$SERVICE" | sed "s/^/Service is /"
+      exit 0
+      ;;
+    status)
+      systemctl status "$SERVICE" --no-pager -n 0 2>/dev/null | head -n 4 || true
+      systemctl is-active --quiet "$SERVICE" && echo "URL: http://localhost:$(port)" || exit 3
+      exit 0
+      ;;
+    logs)
+      exec journalctl -u "$SERVICE" -n 50 -f
+      ;;
+  esac
+fi
 
 case "${1:-}" in
   start) start ;;
